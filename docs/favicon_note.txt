@@ -1,0 +1,5 @@
+"""
+SVG favicon placeholder for the Smart University Automation System.
+Saved as frontend/public/favicon.svg
+"""
+# This file documents the favicon SVG — actual file is frontend/public/favicon.svg
