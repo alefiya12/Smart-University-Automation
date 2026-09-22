@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.utils.deps import require_admin, require_verified, get_current_user
+from app.utils.deps import require_admin, require_faculty, require_verified, get_current_user
 from app.models.user import User, UserRole
 from app.models.student import Student
 from app.models.department import Department
@@ -59,25 +59,21 @@ def bulk_admissions(
 @router.post(
     "/bulk/upload",
     response_model=BulkAdmissionResponse,
-    summary="Upload Excel file and run admission bot (admin only)",
+    status_code=status.HTTP_200_OK,
+    summary="Upload Excel file for bulk admission (admin only)",
 )
 async def bulk_admissions_excel(
-    file: UploadFile = File(..., description="Excel file (.xlsx) with admission data"),
+    file: UploadFile = File(...),
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    import pandas as pd
-    import io
-    content = await file.read()
-    try:
-        df = pd.read_excel(io.BytesIO(content))
-        # Normalize column names
-        df.columns = [c.strip().lower().replace(' ', '_') for c in df.columns]
-        records = df.where(df.notna(), None).to_dict(orient='records')
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f"Could not parse Excel file: {exc}")
-
+    if not (file.filename.endswith(".xlsx") or file.filename.endswith(".xls")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only .xlsx or .xls files are accepted",
+        )
+    contents = await file.read()
+    records = admission_service.parse_admission_excel(contents)
     result = admission_service.process_bulk_admissions(
         db, records, triggered_by=current_user.username
     )
@@ -94,14 +90,14 @@ async def bulk_admissions_excel(
 # ── List all students ─────────────────────────────────────────────────────────
 @router.get(
     "/",
-    summary="List all admitted students (admin only)",
+    summary="List all admitted students (admin and faculty)",
 )
 def list_students(
     page: int = 1,
-    page_size: int = 20,
+    page_size: int = 50,
     department_id: Optional[int] = None,
     search: Optional[str] = None,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_faculty),
     db: Session = Depends(get_db),
 ):
     q = db.query(Student)
@@ -111,7 +107,8 @@ def list_students(
         q = q.join(User, Student.user_id == User.id).filter(
             (Student.enrollment_no.ilike(f"%{search}%")) |
             (User.email.ilike(f"%{search}%")) |
-            (User.username.ilike(f"%{search}%"))
+            (User.username.ilike(f"%{search}%")) |
+            (Student.full_name.ilike(f"%{search}%"))
         )
     total = q.count()
     students = q.offset((page - 1) * page_size).limit(page_size).all()
@@ -123,11 +120,13 @@ def list_students(
         return {
             "id": s.id, "enrollment_no": s.enrollment_no,
             "email": user.email if user else None,
-            "username": s.full_name if s.full_name else (user.username if user else None),
+            "full_name": s.full_name or (user.username if user else ""),
+            "username": user.username if user else None,
             "department": dept.name if dept else None,
             "course": course.name if course else None,
             "semester": s.semester, "is_admitted": s.is_admitted,
             "admission_year": s.admission_year,
+            "academic_standing": s.academic_standing or "Regular",
         }
 
     return {

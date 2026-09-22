@@ -120,8 +120,8 @@ export default function StudentAttendance() {
                 {summaries.length === 0 ? (
                   <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>No attendance records found.</td></tr>
                 ) : (
-                  summaries.map(s => (
-                    <tr key={s.subject_id}>
+                  summaries.map((s, idx) => (
+                    <tr key={s.subject_id || s.subject_name || idx}>
                       <td style={{ fontWeight: 600 }}>{s.subject_name}</td>
                       <td>Semester {s.semester}</td>
                       <td>{s.lectures_attended}</td>
@@ -168,8 +168,8 @@ export default function StudentAttendance() {
                 {dailyLogs.length === 0 ? (
                   <tr><td colSpan="3" style={{ textAlign: 'center', padding: '2rem' }}>No daily logs found.</td></tr>
                 ) : (
-                  dailyLogs.map(log => (
-                    <tr key={log.id}>
+                  dailyLogs.map((log, idx) => (
+                    <tr key={log.id || `${log.date}-${log.subject_name}-${idx}`}>
                       <td>{log.date}</td>
                       <td style={{ fontWeight: 500 }}>{log.subject_name}</td>
                       <td>
