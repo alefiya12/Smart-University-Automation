@@ -11,7 +11,7 @@ from app.database import get_db
 from app.utils.deps import require_admin
 from app.models.user import User
 from app.models.course import Course
-from app.models.admission_staging import AdmissionStaging, CandidateCategory
+from app.models.admission_staging import AdmissionStaging, CandidateCategory, AdmissionStatus, AllocatedSeatType
 from app.services import allocation_service
 
 router = APIRouter(prefix="/api/allocation", tags=["Allocation"])
@@ -26,10 +26,19 @@ async def upload_staging(
     import pandas as pd
     import io
     content = await file.read()
+    if not content or len(content) == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty file uploaded.")
+    filename = (file.filename or "").lower()
+    if not (filename.endswith(".xlsx") or filename.endswith(".xls")):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file type. Please upload an Excel file (.xlsx or .xls).")
     try:
         df = pd.read_excel(io.BytesIO(content))
+        if df.empty:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Excel file is empty.")
         # Normalize columns by stripping whitespaces
         df.columns = [str(c).strip() for c in df.columns]
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail=f"Could not parse Excel file: {exc}")
@@ -37,6 +46,33 @@ async def upload_staging(
     # Expecting columns: Student_ID, Student_Name, Applied_Course, Candidate_Category, 
     # Class_12_Pct, Entrance_Exam_Score, Core_Subject_Score, Date_Of_Birth
     
+    # Normalize column names for flexible parsing
+    col_mapping = {}
+    for col in df.columns:
+        norm = str(col).strip().lower().replace(" ", "_").replace("%", "pct")
+        if norm in ["student_id", "studentid", "enrollment_no", "id"]:
+            col_mapping[col] = "Student_ID"
+        elif norm in ["student_name", "studentname", "full_name", "name"]:
+            col_mapping[col] = "Student_Name"
+        elif norm in ["applied_course", "applied_course_code", "course", "course_code"]:
+            col_mapping[col] = "Applied_Course"
+        elif norm in ["candidate_category", "category", "quota"]:
+            col_mapping[col] = "Candidate_Category"
+        elif norm in ["class_12_pct", "class_12", "12th_pct", "12th_score"]:
+            col_mapping[col] = "Class_12_Pct"
+        elif norm in ["entrance_exam_score", "entrance_score", "entrance"]:
+            col_mapping[col] = "Entrance_Exam_Score"
+        elif norm in ["core_subject_score", "core_score", "core_subject"]:
+            col_mapping[col] = "Core_Subject_Score"
+        elif norm in ["date_of_birth", "dob", "birth_date"]:
+            col_mapping[col] = "Date_Of_Birth"
+
+    df = df.rename(columns=col_mapping)
+    required_cols = ["Student_ID", "Student_Name", "Applied_Course", "Class_12_Pct", "Entrance_Exam_Score", "Core_Subject_Score", "Date_Of_Birth"]
+    missing_cols = [c for c in required_cols if c not in df.columns]
+    if missing_cols:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Missing required column(s): {', '.join(missing_cols)}")
+
     # Pre-fetch courses for foreign key mapping
     courses = db.query(Course).all()
     course_map = {}
@@ -47,6 +83,7 @@ async def upload_staging(
     
     inserted = 0
     errors = []
+    staged_cache = {}
     
     for idx, row in df.iterrows():
         try:
@@ -58,27 +95,96 @@ async def upload_staging(
                 continue
                 
             cat_str = str(row.get('Candidate_Category', 'GEN')).strip().upper()
+            if cat_str in ["OPEN_MERIT", "OPEN", "GENERAL"]:
+                cat_str = "GEN"
             try:
                 category = CandidateCategory(cat_str)
             except ValueError:
-                category = CandidateCategory.GEN
+                errors.append(f"Row {idx+1}: Invalid candidate category '{cat_str}'. Must be one of GEN, OBC, SC, ST, EWS.")
+                continue
                 
-            record = AdmissionStaging(
-                student_id=str(row['Student_ID']),
-                student_name=str(row['Student_Name']).title(),
-                applied_course_id=c_id,
-                candidate_category=category,
-                class_12_pct=float(row['Class_12_Pct']),
-                entrance_exam_score=float(row['Entrance_Exam_Score']),
-                core_subject_score=float(row['Core_Subject_Score']),
-                date_of_birth=pd.to_datetime(row['Date_Of_Birth']).date(),
-            )
-            db.add(record)
+            student_stg_id = str(row['Student_ID']).strip()
+            student_name = str(row['Student_Name']).title()
+
+            # Validate scores
+            class_12_raw = row['Class_12_Pct']
+            entrance_raw = row['Entrance_Exam_Score']
+            core_raw = row['Core_Subject_Score']
+            if pd.isna(class_12_raw) or str(class_12_raw).strip() == '':
+                errors.append(f"Row {idx+1}: Blank Class_12_Pct for {student_stg_id}")
+                continue
+            if pd.isna(entrance_raw) or str(entrance_raw).strip() == '':
+                errors.append(f"Row {idx+1}: Blank Entrance_Exam_Score for {student_stg_id}")
+                continue
+            if pd.isna(core_raw) or str(core_raw).strip() == '':
+                errors.append(f"Row {idx+1}: Blank Core_Subject_Score for {student_stg_id}")
+                continue
+
+            try:
+                class_12 = float(class_12_raw)
+                entrance = float(entrance_raw)
+                core = float(core_raw)
+            except ValueError:
+                errors.append(f"Row {idx+1}: Non-numeric score format for {student_stg_id}")
+                continue
+
+            if class_12 < 0.0 or class_12 > 100.0:
+                errors.append(f"Row {idx+1}: Class_12_Pct {class_12} out of bounds (0-100) for {student_stg_id}")
+                continue
+            if entrance < 0.0 or entrance > 100.0:
+                errors.append(f"Row {idx+1}: Entrance_Exam_Score {entrance} out of bounds (0-100) for {student_stg_id}")
+                continue
+            if core < 0.0 or core > 100.0:
+                errors.append(f"Row {idx+1}: Core_Subject_Score {core} out of bounds (0-100) for {student_stg_id}")
+                continue
+
+            # Validate date of birth
+            raw_dob = row['Date_Of_Birth']
+            if pd.isna(raw_dob) or str(raw_dob).strip() == '':
+                errors.append(f"Row {idx+1}: Blank Date_Of_Birth for {student_stg_id}")
+                continue
+            try:
+                dob = pd.to_datetime(raw_dob).date()
+            except Exception:
+                errors.append(f"Row {idx+1}: Invalid date format '{raw_dob}' for {student_stg_id}")
+                continue
+
+            existing_stg = staged_cache.get(student_stg_id) or db.query(AdmissionStaging).filter(AdmissionStaging.student_id == student_stg_id).first()
+            if existing_stg:
+                existing_stg.student_name = student_name
+                existing_stg.applied_course_id = c_id
+                existing_stg.candidate_category = category
+                existing_stg.class_12_pct = class_12
+                existing_stg.entrance_exam_score = entrance
+                existing_stg.core_subject_score = core
+                existing_stg.date_of_birth = dob
+                existing_stg.final_admission_status = AdmissionStatus.PENDING
+                existing_stg.allocated_seat_type = AllocatedSeatType.NONE
+                existing_stg.waitlist_rank = None
+                existing_stg.reason_code_logs = None
+                staged_cache[student_stg_id] = existing_stg
+            else:
+                record = AdmissionStaging(
+                    student_id=student_stg_id,
+                    student_name=student_name,
+                    applied_course_id=c_id,
+                    candidate_category=category,
+                    class_12_pct=class_12,
+                    entrance_exam_score=entrance,
+                    core_subject_score=core,
+                    date_of_birth=dob,
+                )
+                db.add(record)
+                staged_cache[student_stg_id] = record
             inserted += 1
         except Exception as e:
             errors.append(f"Row {idx+1}: Parsing error - {str(e)}")
             
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Database commit error: {str(e)}")
     
     if inserted == 0 and errors:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Failed to stage any records. First error: {errors[0]}")

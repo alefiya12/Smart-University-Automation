@@ -65,8 +65,21 @@ class ResultKeywords:
         try:
             enrollment = str(record.get('enrollment_no', '') or record.get('student_id', '')).strip()
             subject_name = str(record.get('subject_name', '') or record.get('subject', '')).strip()
-            internal = float(record.get('internal_score', 0))
-            external = float(record.get('external_score', 0))
+            raw_internal = record.get('internal_score')
+            raw_external = record.get('external_score')
+            if raw_internal is None or str(raw_internal).strip() == '':
+                raise ValueError(f"Blank internal score for {enrollment}")
+            if raw_external is None or str(raw_external).strip() == '':
+                raise ValueError(f"Blank external score for {enrollment}")
+
+            internal = float(raw_internal)
+            external = float(raw_external)
+
+            if internal < 0.0 or internal > 30.0:
+                raise ValueError(f"Internal score {internal} out of bounds (0-30) for {enrollment}")
+            if external < 0.0 or external > 70.0:
+                raise ValueError(f"External score {external} out of bounds (0-70) for {enrollment}")
+
             semester = int(record.get('semester', 1))
             academic_year = str(record.get('academic_year', str(datetime.utcnow().year)))
 

@@ -312,11 +312,14 @@ def download_letter(
 @router.get("/letter/{enrollment_no}", summary="Download admission letter PDF by enrollment number")
 def download_letter_by_enrollment(
     enrollment_no: str,
+    current_user: User = Depends(require_verified),
     db: Session = Depends(get_db),
 ):
     student = db.query(Student).filter(Student.enrollment_no == enrollment_no).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
+    if current_user.role == UserRole.student and student.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     from app.services.pdf_service import generate_admission_letter
     user   = db.query(User).filter(User.id == student.user_id).first()

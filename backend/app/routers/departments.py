@@ -7,7 +7,7 @@ from app.database import get_db
 from app.models.department import Department
 from app.models.course import Course
 from app.models.attendance import CourseSubject
-from app.utils.deps import require_admin
+from app.utils.deps import require_admin, require_verified
 from app.models.user import User
 
 router = APIRouter(prefix="/api/departments", tags=["Departments"])
@@ -37,7 +37,7 @@ class CourseSubjectCreate(BaseModel):
     semester: int = 1
 
 @router.get("/")
-def get_departments(db: Session = Depends(get_db)):
+def get_departments(db: Session = Depends(get_db), current_user: User = Depends(require_verified)):
     depts = db.query(Department).all()
     result = []
     for d in depts:
@@ -85,6 +85,10 @@ def create_course(dept_id: int, data: CourseCreate, db: Session = Depends(get_db
     if db.query(Course).filter(Course.code == data.code).first():
         raise HTTPException(status_code=400, detail="Course code already exists")
         
+    reserved_sum = (data.quota_obc or 0) + (data.quota_sc or 0) + (data.quota_st or 0) + (data.quota_ews or 0)
+    if reserved_sum > 100.0:
+        raise HTTPException(status_code=400, detail=f"Total reserved quotas ({reserved_sum}%) cannot exceed 100%")
+
     course = Course(
         department_id=dept.id,
         name=data.name,
@@ -106,7 +110,7 @@ def create_course(dept_id: int, data: CourseCreate, db: Session = Depends(get_db
     return course
 
 @router.get("/courses/{course_id}/subjects")
-def get_course_subjects(course_id: int, db: Session = Depends(get_db)):
+def get_course_subjects(course_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_verified)):
     subjects = db.query(CourseSubject).filter(CourseSubject.course_id == course_id).all()
     return subjects
 
@@ -162,6 +166,10 @@ def update_course(course_id: int, data: CourseCreate, db: Session = Depends(get_
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
         
+    reserved_sum = (data.quota_obc or 0) + (data.quota_sc or 0) + (data.quota_st or 0) + (data.quota_ews or 0)
+    if reserved_sum > 100.0:
+        raise HTTPException(status_code=400, detail=f"Total reserved quotas ({reserved_sum}%) cannot exceed 100%")
+
     course.name = data.name
     course.code = data.code
     course.duration_semesters = data.duration_semesters

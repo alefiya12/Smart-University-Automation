@@ -26,7 +26,7 @@ def list_logs(
 ):
     q = db.query(BotRunLog)
     if bot_name:
-        q = q.filter(BotRunLog.bot_name == bot_name)
+        q = q.filter(BotRunLog.bot_name.ilike(f"%{bot_name}%"))
     if status:
         q = q.filter(BotRunLog.status == status)
     total = q.count()
@@ -97,6 +97,17 @@ def download_report(
     if not log:
         raise HTTPException(404, "Log not found")
     path = log.report_file_path or log.log_file_path
-    if not path or not os.path.exists(path):
+    if not path:
+        raise HTTPException(404, "No report file associated with this log")
+    
+    if not os.path.isabs(path):
+        _BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        _PROJECT_ROOT = os.path.abspath(os.path.join(_BACKEND_ROOT, ".."))
+        for candidate in [os.path.join(_PROJECT_ROOT, path), os.path.join(_BACKEND_ROOT, path), os.path.abspath(path)]:
+            if os.path.exists(candidate):
+                path = candidate
+                break
+
+    if not os.path.exists(path):
         raise HTTPException(404, "Report file not found on disk")
     return FileResponse(path, media_type="text/html", filename=os.path.basename(path))

@@ -1,44 +1,92 @@
 import pandas as pd
+import random
 import os
 
 os.makedirs('sample_data', exist_ok=True)
 
-# Admission Data
-admission_data = {
-    'email': ['newstudent1@example.com', 'newstudent2@example.com'],
-    'full_name': ['Alice Smith', 'Bob Johnson'],
-    'department_name': ['Computer Science', 'Computer Science'],
-    'course_name': ['B.Tech CSE', 'B.Tech CSE'],
-    'admission_year': [2026, 2026],
-    'semester': [1, 1],
-    'phone': ['1234567890', '0987654321'],
-    'address': ['123 Campus Dr', '456 College Ave'],
-    'guardian_name': ['Mr. Smith', 'Mrs. Johnson'],
-    'guardian_phone': ['1112223333', '4445556666']
-}
-pd.DataFrame(admission_data).to_excel('sample_data/admission_sample.xlsx', index=False)
+# 1. Admission Sample
+categories = ['GEN', 'SC', 'ST', 'OBC', 'EWS']
+admission_data = []
 
-# Attendance Data
-attendance_data = {
-    'enrollment_no': ['SU2026-0001', 'SU2026-0002', 'SU2026-0001', 'SU2026-0002'],
-    'subject': ['CS101', 'CS101', 'CS102', 'CS102'],
-    'date': ['2026-09-01', '2026-09-01', '2026-09-01', '2026-09-01'],
-    'status': ['present', 'absent', 'present', 'present'],
-    'semester': [1, 1, 1, 1]
-}
-pd.DataFrame(attendance_data).to_excel('sample_data/attendance_sample.xlsx', index=False)
+for i in range(1, 21):
+    cat = random.choice(categories)
+    # Generate some high scores to ensure some get in, some low to get rejected or waitlisted
+    if i <= 5: 
+        # Very high scores (top rankers)
+        e_score = random.randint(90, 99)
+        c_score = random.randint(85, 95)
+        m_score = random.randint(85, 95)
+    elif i <= 15:
+        # Average
+        e_score = random.randint(60, 89)
+        c_score = random.randint(60, 84)
+        m_score = random.randint(60, 84)
+    else:
+        # Low scores (might get rejected based on criteria)
+        e_score = random.randint(40, 55)
+        c_score = random.randint(40, 55)
+        m_score = random.randint(40, 55)
 
-# Results Data
-results_data = {
-    'enrollment_no': ['SU2026-0001', 'SU2026-0002', 'SU2026-0001', 'SU2026-0002'],
-    'subject': ['CS101', 'CS101', 'CS102', 'CS102'],
-    'marks': [85, 30, 92, 78],
-    'semester': [1, 1, 1, 1],
-    'credits': [4.0, 4.0, 3.0, 3.0],
-    'max_marks': [100, 100, 100, 100],
-    'subject_code': ['CS101-TH', 'CS101-TH', 'CS102-TH', 'CS102-TH'],
-    'academic_year': ['2026-2027', '2026-2027', '2026-2027', '2026-2027']
-}
-pd.DataFrame(results_data).to_excel('sample_data/results_sample.xlsx', index=False)
+    admission_data.append({
+        'Student_ID': f'APP-10{i:02d}',
+        'Student_Name': f'Student {i}',
+        'Applied_Course': 'MCA',
+        'Candidate_Category': cat,
+        'Class_12_Pct': m_score,
+        'Entrance_Exam_Score': e_score,
+        'Core_Subject_Score': c_score,
+        'Date_Of_Birth': '2000-05-15'
+    })
 
-print("Sample files generated in sample_data/ directory.")
+df_adm = pd.DataFrame(admission_data)
+df_adm.to_excel('sample_data/Sample_Admission.xlsx', index=False)
+
+
+# 2. Attendance Sample (for 10 accepted students)
+attendance_data = []
+dates = ['2026-09-01', '2026-09-02', '2026-09-03']
+for i in range(1, 11):
+    sid = f'SU2026-{i:04d}'
+    for d in dates:
+        attendance_data.append({
+            'student_id': sid,
+            'date': d,
+            'Physics': random.choice([1, 1, 1, 0]),     # High chance of present
+            'Mathematics': random.choice([1, 1, 1, 0]),
+            'Geography': random.choice([1, 1, 1, 0])
+        })
+
+df_att = pd.DataFrame(attendance_data)
+df_att.to_excel('sample_data/Sample_Attendance.xlsx', index=False)
+
+
+# 3. Results Sample (for 10 accepted students)
+results_data = []
+subjects = ['Physics', 'Mathematics', 'Geography']
+
+for i in range(1, 11):
+    sid = f'SU2026-{i:04d}'
+    for sub in subjects:
+        if i == 10:
+            # Let's make student 10 fail in one subject intentionally to test Backlog logic
+            if sub == 'Physics':
+                internal = random.randint(5, 10)  # Below 12
+                external = random.randint(30, 45)
+            else:
+                internal = random.randint(15, 25)
+                external = random.randint(35, 60)
+        else:
+            internal = random.randint(15, 29)
+            external = random.randint(35, 68)
+            
+        results_data.append({
+            'student_id': sid,
+            'subject_name': sub,
+            'internal_score': internal,
+            'external_score': external
+        })
+
+df_res = pd.DataFrame(results_data)
+df_res.to_excel('sample_data/Sample_Results.xlsx', index=False)
+
+print("Sample files generated successfully!")

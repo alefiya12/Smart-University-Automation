@@ -88,8 +88,9 @@ async function runAutomation() {
       { name: 'Faculty Directory', path: '/dashboard/admin/faculty', shot: '07_admin_faculty.png' },
       { name: 'Departments & Courses', path: '/dashboard/admin/departments', shot: '08_admin_departments.png' },
       { name: 'Fee Ledger', path: '/dashboard/admin/fees', shot: '09_admin_fees.png' },
-      { name: 'RPA Bot Logs', path: '/dashboard/admin/bot-logs', shot: '10_admin_bot_logs.png' },
-      { name: 'System Notifications', path: '/dashboard/admin/notifications', shot: '11_admin_notifications.png' },
+      { name: '⚡ RPA Control Center', path: '/dashboard/admin/rpa-control', shot: '10_admin_rpa_control.png' },
+      { name: 'RPA Bot Logs', path: '/dashboard/admin/bot-logs', shot: '11_admin_bot_logs.png' },
+      { name: 'System Notifications', path: '/dashboard/admin/notifications', shot: '12_admin_notifications.png' },
     ];
 
     for (const route of adminRoutes) {

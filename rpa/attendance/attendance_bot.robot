@@ -14,7 +14,7 @@ Suite Setup      Suite Setup Steps
 Suite Teardown   Log Run Summary
 
 *** Variables ***
-${EXCEL_PATH}    ${CURDIR}${/}..${/}..${/}docs${/}sample_data${/}attendance_sample.xlsx
+${EXCEL_PATH}    ${CURDIR}${/}..${/}..${/}sample_data${/}Sample_Attendance.xlsx
 
 *** Test Cases ***
 
@@ -32,5 +32,8 @@ Check And Send Low Attendance Warnings
 *** Keywords ***
 
 Suite Setup Steps
-    File Should Exist    ${EXCEL_PATH}
-    ...    msg=Attendance Excel not found: ${EXCEL_PATH}
+    ${exists}=    Run Keyword And Return Status    File Should Exist    ${EXCEL_PATH}
+    IF    not ${exists}
+        Set Suite Variable    ${EXCEL_PATH}    ${CURDIR}${/}..${/}..${/}docs${/}sample_data${/}attendance_sample.xlsx
+    END
+    File Should Exist    ${EXCEL_PATH}    msg=Attendance Excel not found: ${EXCEL_PATH}

@@ -76,8 +76,8 @@ export default function StudentResults() {
 
   if (loading && !profile) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading examination results...</div>
 
-  const sgpa = results.length > 0 && results[0].sgpa !== null ? results[0].sgpa : '—'
-  const cgpa = results.length > 0 && results[0].cgpa !== null ? results[0].cgpa : '—'
+  const sgpa = results.length > 0 && results[0].sgpa !== null && results[0].sgpa !== undefined && Number(results[0].sgpa) > 0 ? Number(results[0].sgpa).toFixed(2) : '—'
+  const cgpa = results.length > 0 && results[0].cgpa !== null && results[0].cgpa !== undefined && Number(results[0].cgpa) > 0 ? Number(results[0].cgpa).toFixed(2) : (sgpa !== '—' ? sgpa : '—')
   const hasBacklogs = results.some(r => !r.pass_status)
 
   return (
@@ -141,48 +141,88 @@ export default function StudentResults() {
                 <th>External (/70)</th>
                 <th>Total (/100)</th>
                 <th>Grade Letter</th>
-                <th>Grade Points</th>
                 <th>Result Status</th>
               </tr>
             </thead>
             <tbody>
               {results.length === 0 ? (
                 <tr>
-                  <td colSpan="7" style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--color-text-secondary)' }}>
+                  <td colSpan="6" style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--color-text-secondary)' }}>
                     No published marks found for Semester {semester}. Results may still be under administrative evaluation.
                   </td>
                 </tr>
               ) : (
-                results.map(r => (
-                  <tr key={r.id}>
-                    <td style={{ fontWeight: 600 }}>{r.subject}</td>
-                    <td>
-                      <span style={{ color: r.internal_score >= 12.0 ? 'inherit' : 'var(--color-danger)', fontWeight: r.internal_score < 12 ? 600 : 400 }}>
-                        {r.internal_score} {r.internal_score < 12 && '⚠️'}
-                      </span>
-                    </td>
-                    <td>
-                      <span style={{ color: r.external_score >= 28.0 ? 'inherit' : 'var(--color-danger)', fontWeight: r.external_score < 28 ? 600 : 400 }}>
-                        {r.external_score} {r.external_score < 28 && '⚠️'}
-                      </span>
-                    </td>
-                    <td style={{ fontWeight: 600 }}>{r.total_marks_obtained}</td>
-                    <td>
-                      <span style={{ fontWeight: 700, color: r.grade_letter === 'F' ? 'var(--color-danger)' : 'var(--color-primary)' }}>
-                        {r.grade_letter}
-                      </span>
-                    </td>
-                    <td>{r.grade_points}</td>
-                    <td>
-                      <span className={`badge ${r.pass_status ? 'badge-success' : 'badge-danger'}`}>
-                        {r.pass_status ? 'PASS' : 'FAIL'}
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                results.map(r => {
+                  const subName = r.subject_name || r.subject || 'Subject'
+                  const intScore = Number(r.internal_score || 0)
+                  const extScore = Number(r.external_score || 0)
+                  const totScore = Number(r.total_marks_obtained || (intScore + extScore))
+
+                  return (
+                    <tr key={r.id}>
+                      <td style={{ fontWeight: 600 }}>{subName}</td>
+                      <td>
+                        <span style={{ color: intScore >= 12.0 ? 'inherit' : 'var(--color-danger)', fontWeight: intScore < 12 ? 600 : 400 }}>
+                          {intScore.toFixed(1)} {intScore < 12 && '⚠️'}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ color: extScore >= 28.0 ? 'inherit' : 'var(--color-danger)', fontWeight: extScore < 28 ? 600 : 400 }}>
+                          {extScore.toFixed(1)} {extScore < 28 && '⚠️'}
+                        </span>
+                      </td>
+                      <td style={{ fontWeight: 600 }}>{totScore.toFixed(1)}</td>
+                      <td>
+                        <span style={{ fontWeight: 700, color: r.grade_letter === 'F' ? 'var(--color-danger)' : 'var(--color-primary)' }}>
+                          {r.grade_letter}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`badge ${r.pass_status ? 'badge-success' : 'badge-danger'}`}>
+                          {r.pass_status ? 'PASS' : 'FAIL'}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>
+        </div>
+        
+        {/* Grade Letter Legend */}
+        <div style={{ marginTop: 'var(--space-6)', padding: 'var(--space-4)', background: 'var(--color-bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+          <h4 style={{ margin: '0 0 var(--space-3) 0', fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Grade Letter Categories</h4>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-4)', fontSize: 'var(--text-sm)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>O</span>
+              <span style={{ color: 'var(--color-text-secondary)' }}>90 - 100</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>A+</span>
+              <span style={{ color: 'var(--color-text-secondary)' }}>80 - 89.99</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>A</span>
+              <span style={{ color: 'var(--color-text-secondary)' }}>70 - 79.99</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>B+</span>
+              <span style={{ color: 'var(--color-text-secondary)' }}>60 - 69.99</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>B</span>
+              <span style={{ color: 'var(--color-text-secondary)' }}>50 - 59.99</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>P</span>
+              <span style={{ color: 'var(--color-text-secondary)' }}>40 - 49.99</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontWeight: 700, color: 'var(--color-danger)' }}>F</span>
+              <span style={{ color: 'var(--color-text-secondary)' }}>Below 40</span>
+            </div>
+          </div>
         </div>
       </Card>
     </div>

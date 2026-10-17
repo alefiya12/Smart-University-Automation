@@ -128,7 +128,13 @@ class AttendanceKeywords:
                         status=status_enum
                     )
                     db.add(new_log)
-                    subject.total_lectures_conducted += 1
+                    db.flush()
+
+                from sqlalchemy import func
+                distinct_dates = db.query(func.count(func.distinct(DailyAttendanceLog.date))).filter(
+                    DailyAttendanceLog.subject_id == subject.id
+                ).scalar() or 1
+                subject.total_lectures_conducted = distinct_dates
 
                 summary = db.query(StudentSubjectSummary).filter(
                     StudentSubjectSummary.student_id == student.id,
@@ -145,19 +151,30 @@ class AttendanceKeywords:
                     db.add(summary)
                     db.flush()
 
-                # Recompute total attended
+                # Recompute total attended for this student
                 total_attended = db.query(DailyAttendanceLog).filter(
                     DailyAttendanceLog.student_id == student.id,
                     DailyAttendanceLog.subject_id == subject.id,
                     DailyAttendanceLog.status == DailyAttendanceStatus.Present
                 ).count()
-                summary.lectures_attended = total_attended
 
-                total_conducted = max(subject.total_lectures_conducted, 1)
-                summary.cumulative_percentage = round((total_attended / total_conducted) * 100.0, 2)
+                total_for_student = db.query(DailyAttendanceLog).filter(
+                    DailyAttendanceLog.student_id == student.id,
+                    DailyAttendanceLog.subject_id == subject.id
+                ).count()
+
+                total_conducted = max(total_for_student, distinct_dates, 1)
+                summary.lectures_attended = total_attended
+                summary.cumulative_percentage = round((total_attended / total_conducted) * 100.0, 1)
 
                 threshold = student.course.min_attendance_pct if student.course and student.course.min_attendance_pct else 75.0
-                if summary.cumulative_percentage < threshold:
+                if summary.cumulative_percentage <= 60.0:
+                    summary.attendance_warning_flag = True
+                    summary.dashboard_alert_message = (
+                        f"CRITICAL ALERT: Your attendance in {subject.subject_name} is "
+                        f"{summary.cumulative_percentage:.1f}%, critically below the 60.0% debarment threshold."
+                    )
+                elif summary.cumulative_percentage < threshold:
                     summary.attendance_warning_flag = True
                     summary.dashboard_alert_message = (
                         f"Warning: Your attendance in {subject.subject_name} is "
@@ -204,20 +221,33 @@ class AttendanceKeywords:
                 pct = summ.cumulative_percentage
                 threshold = student.course.min_attendance_pct if student.course and student.course.min_attendance_pct else 75.0
 
-                robot_logger.warn(
-                    f"⚠ Low attendance warning: {student.enrollment_no} | {subject.subject_name} = {pct:.1f}% (Min {threshold}%)"
-                )
+                if pct <= 60.0:
+                    robot_logger.warn(
+                        f"🚨 CRITICAL attendance alert: {student.enrollment_no} | {subject.subject_name} = {pct:.1f}% (Critically below 60.0%)"
+                    )
+                else:
+                    robot_logger.warn(
+                        f"⚠ Low attendance warning: {student.enrollment_no} | {subject.subject_name} = {pct:.1f}% (Min {threshold}%)"
+                    )
 
-                # Add Notification
-                notif = Notification(
-                    student_id=student.id,
-                    title=f"Low Attendance: {subject.subject_name}",
-                    message=summ.dashboard_alert_message or f"Attendance {pct:.1f}% is below required {threshold}%.",
-                    notification_type=NotificationType.in_app,
-                    category=NotificationCategory.attendance_warning,
-                    status=NotificationStatus.sent,
-                )
-                db.add(notif)
+                # Add Notification if no unread warning exists for this subject
+                existing_notif = db.query(Notification).filter(
+                    Notification.student_id == student.id,
+                    Notification.title == f"Low Attendance: {subject.subject_name}",
+                    Notification.category == NotificationCategory.attendance_warning,
+                    Notification.is_read == False
+                ).first()
+
+                if not existing_notif:
+                    notif = Notification(
+                        student_id=student.id,
+                        title=f"Low Attendance: {subject.subject_name}",
+                        message=summ.dashboard_alert_message or f"Attendance {pct:.1f}% is below required {threshold}%.",
+                        notification_type=NotificationType.in_app,
+                        category=NotificationCategory.attendance_warning,
+                        status=NotificationStatus.sent,
+                    )
+                    db.add(notif)
 
                 if user and user.email:
                     try:

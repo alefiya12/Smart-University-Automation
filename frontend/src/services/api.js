@@ -103,6 +103,13 @@ export const managementApi = {
   confirmAllocation: (id) => api.post(`/allocation/${id}/confirm`),
   cancelAllocation: (id) => api.post(`/allocation/${id}/cancel`),
   commitAllocations: () => api.post('/allocation/commit'),
+
+  // RPA Bot Runner
+  triggerBot:       (botName) => api.post(`/bots/run/${botName}`),
+  getBotStatus:     (logId)   => api.get(`/bots/status/${logId}`),
+  getRecentBotRuns: ()        => api.get('/bots/recent'),
+  listBots:         ()        => api.get('/bots/list'),
+  downloadBotReport:(logId)   => `/api/logs/${logId}/report`,
 }
 
 // ─── Student Portal API helpers ───────────────────────────────────────────────

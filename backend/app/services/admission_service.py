@@ -51,6 +51,10 @@ def process_single_admission(db: Session, record: dict, bot_run_id: Optional[int
     email = record.get('email', '').strip().lower()
     full_name = record.get('full_name', '').strip()
 
+    if not email:
+        logger.warning("Skipping record with missing email")
+        return {'success': False, 'email': None, 'error': 'missing_email', 'enrollment_no': None}
+
     # ── Duplicate check ───────────────────────────────────────────────────────
     existing = db.query(User).filter(User.email == email).first()
     if existing:
@@ -197,3 +201,26 @@ def process_bulk_admissions(
         'failed':     failed,
         'errors':     errors,
     }
+
+
+def parse_admission_excel(contents: bytes) -> List[dict]:
+    import pandas as pd
+    import io
+    from fastapi import HTTPException
+
+    if not contents or len(contents) == 0:
+        raise HTTPException(400, "Empty file uploaded.")
+    try:
+        df = pd.read_excel(io.BytesIO(contents))
+        if df.empty:
+            raise HTTPException(400, "Excel file is empty.")
+        df.columns = [str(c).strip().lower().replace(' ', '_') for c in df.columns]
+        required_cols = ['full_name', 'email']
+        missing = [c for c in required_cols if c not in df.columns]
+        if missing:
+            raise HTTPException(400, f"Missing required column(s): {', '.join(missing)}")
+        return df.where(df.notna(), None).to_dict(orient='records')
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(400, f"Could not parse Excel file: {exc}")

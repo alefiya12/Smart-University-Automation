@@ -3,6 +3,18 @@ import { managementApi } from '../../services/api'
 import Card from '../../components/common/Card'
 import Button from '../../components/common/Button'
 import { notify as toast } from '../../components/common/Toast'
+import BotRunPanel from '../../components/common/BotRunPanel'
+
+const ADMISSION_BOT_STEPS = [
+  'Read admission Excel / staging data',
+  'Validate & normalize records',
+  'Create User accounts (hashed passwords)',
+  'Generate Enrollment IDs (SU{year}-XXXX)',
+  'Create Student profile records',
+  'Generate PDF Admission Letters',
+  'Queue welcome emails',
+  'Write BotRunLog entry',
+]
 
 export default function AdminAdmission() {
   const [stagingRecords, setStagingRecords] = useState([])
@@ -164,6 +176,16 @@ export default function AdminAdmission() {
           <p className="page-subtitle">Upload student records via Excel to auto-admit, generate letters, and send emails.</p>
         </div>
       </div>
+
+      {/* ── Bot Control Panel ────────────────────────────────────────── */}
+      <BotRunPanel
+        botKey="admission_bot"
+        title="Admission Bot"
+        description="Reads staged Excel data, creates student accounts with hashed passwords, auto-generates enrollment IDs, produces PDF admission letters, and queues confirmation emails."
+        steps={ADMISSION_BOT_STEPS}
+        color="#1A56DB"
+        colorLight="#EBF1FF"
+      />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 'var(--space-6)' }}>
         {/* Advanced Allocation Engine Card */}

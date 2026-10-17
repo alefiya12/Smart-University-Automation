@@ -3,6 +3,17 @@ import api from '../../services/api'
 import Card from '../../components/common/Card'
 import Button from '../../components/common/Button'
 import { notify as toast } from '../../components/common/Toast'
+import BotRunPanel from '../../components/common/BotRunPanel'
+
+const BOT_STEPS = [
+  'Read attendance Excel file',
+  'Resolve student IDs from DB',
+  'Upsert attendance rows',
+  'Update subject summaries',
+  'Evaluate attendance thresholds (75%)',
+  'Fire low-attendance alerts',
+  'Write BotRunLog entry',
+]
 
 export default function AdminAttendance() {
   const [courses, setCourses] = useState([])
@@ -40,14 +51,8 @@ export default function AdminAttendance() {
   }
 
   const handleRunBot = async () => {
-    if (!selectedCourse) {
-      toast.error('Please select a course first.')
-      return
-    }
-    if (!file) {
-      toast.error('Please select an Excel file first.')
-      return
-    }
+    if (!selectedCourse) { toast.error('Please select a course first.'); return }
+    if (!file) { toast.error('Please select an Excel file first.'); return }
 
     setLoading(true)
     const formData = new FormData()
@@ -58,25 +63,22 @@ export default function AdminAttendance() {
       const res = await api.post('/attendance/bulk/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
-      toast.success(res.data.message || 'Attendance bot processed successfully!')
+      toast.success(res.data.message || 'Attendance processed successfully!')
       setFile(null)
       document.getElementById('attendance-file-upload').value = ''
-      
-      if (res.data.errors && res.data.errors.length > 0) {
-        setLogs(res.data.errors)
-      } else {
-        setLogs([`Successfully processed ${res.data.succeeded} records.`])
-      }
+      setLogs(
+        res.data.errors?.length > 0
+          ? res.data.errors
+          : [`✓ Successfully processed ${res.data.succeeded} records.`]
+      )
     } catch (err) {
-      let errorMsg = 'Attendance bot failed to run.'
+      let msg = 'Attendance upload failed.'
       if (err.response?.data?.detail) {
-        if (typeof err.response.data.detail === 'string') {
-          errorMsg = err.response.data.detail
-        } else if (Array.isArray(err.response.data.detail)) {
-          errorMsg = err.response.data.detail.map(d => `${d.loc?.join('.')}: ${d.msg}`).join(', ')
-        }
+        msg = typeof err.response.data.detail === 'string'
+          ? err.response.data.detail
+          : err.response.data.detail.map(d => `${d.loc?.join('.')}: ${d.msg}`).join(', ')
       }
-      toast.error(errorMsg)
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
@@ -87,59 +89,90 @@ export default function AdminAttendance() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Attendance Automation</h1>
-          <p className="page-subtitle">Upload daily attendance records via Excel to auto-calculate percentages and trigger warnings.</p>
+          <p className="page-subtitle">Upload daily attendance records via Excel to auto-calculate percentages and trigger low-attendance warnings.</p>
         </div>
       </div>
 
+      {/* ── Bot Control Panel ────────────────────────────────────────────── */}
+      <BotRunPanel
+        botKey="attendance_bot"
+        title="Attendance Bot"
+        description="Ingests daily attendance matrix Excel, upserts per-student per-subject rows, recomputes rolling %, and fires in-app + email warnings for students below 75% threshold."
+        steps={BOT_STEPS}
+        color="#15803D"
+        colorLight="#F0FDF4"
+      />
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 'var(--space-6)' }}>
-        {/* Upload Card */}
-        <Card title="Run Attendance Bot" subtitle="Supported formats: .xlsx">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', maxWidth: '400px' }}>
-            <select 
-              value={selectedCourse} 
-              onChange={e => setSelectedCourse(e.target.value)}
-              style={{
-                padding: 'var(--space-2)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: 'var(--color-bg)'
-              }}
-            >
-              <option value="">-- Select Course --</option>
-              {courses.map(c => (
-                <option key={c.id} value={c.id}>{c.department_name} - {c.name}</option>
-              ))}
-            </select>
-            <input 
-              id="attendance-file-upload"
-              type="file" 
-              accept=".xlsx, .xls"
-              onChange={handleFileChange}
-              style={{
-                padding: 'var(--space-3)',
-                border: '1px dashed var(--color-border)',
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: 'var(--color-background-soft)'
-              }}
-            />
-            <Button 
-              variant="primary" 
-              onClick={handleRunBot} 
+        {/* Manual Upload Card */}
+        <Card title="Manual Upload — Attendance Excel" subtitle="Supported formats: .xlsx / .xls">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', maxWidth: '460px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 'var(--text-sm)', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>
+                Course
+              </label>
+              <select
+                value={selectedCourse}
+                onChange={e => setSelectedCourse(e.target.value)}
+                className="form-input"
+                style={{ width: '100%' }}
+              >
+                <option value="">-- Select Course --</option>
+                {courses.map(c => (
+                  <option key={c.id} value={c.id}>{c.department_name} — {c.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 'var(--text-sm)', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>
+                Attendance Excel File
+              </label>
+              <input
+                id="attendance-file-upload"
+                type="file"
+                accept=".xlsx, .xls"
+                onChange={handleFileChange}
+                style={{
+                  width: '100%',
+                  padding: 'var(--space-3)',
+                  border: '2px dashed var(--color-border)',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: 'var(--color-bg)',
+                  cursor: 'pointer',
+                }}
+              />
+            </div>
+
+            <Button
+              variant="primary"
+              onClick={handleRunBot}
               isLoading={loading}
-              disabled={!file}
+              disabled={!file || !selectedCourse}
               style={{ width: 'fit-content' }}
             >
-              🚀 Execute Automation
+              📥 Upload & Process Attendance
             </Button>
           </div>
         </Card>
 
-        {/* Status/Logs */}
+        {/* Processing Results */}
         {logs.length > 0 && (
-          <Card title="Run Logs">
-            <div style={{ padding: 'var(--space-4)', backgroundColor: 'var(--color-background-soft)', borderRadius: 'var(--radius-md)' }}>
+          <Card title="Processing Results">
+            <div style={{
+              padding: 'var(--space-4)',
+              backgroundColor: '#0F172A',
+              borderRadius: 'var(--radius-md)',
+            }}>
               {logs.map((log, i) => (
-                <div key={i} style={{ marginBottom: '4px', fontFamily: 'monospace', fontSize: '13px' }}>{log}</div>
+                <div key={i} style={{
+                  marginBottom: '4px',
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: '13px',
+                  color: log.startsWith('✓') ? '#86EFAC' : '#FDA4AF',
+                }}>
+                  {log}
+                </div>
               ))}
             </div>
           </Card>

@@ -54,6 +54,7 @@ from app.routers import fees as fees_router
 from app.routers import dashboard as dashboard_router
 from app.routers import allocation as allocation_router
 from app.routers import notifications as notifications_router
+from app.routers import bots as bots_router
 
 app.include_router(auth_router.router)
 app.include_router(admission_router.router)
@@ -66,6 +67,7 @@ app.include_router(fees_router.router)
 app.include_router(dashboard_router.router)
 app.include_router(allocation_router.router)
 app.include_router(notifications_router.router)
+app.include_router(bots_router.router)
 
 
 @app.get("/", tags=["Health"])

@@ -31,13 +31,17 @@ def allocate_seats_for_course(db: Session, course_id: int):
 
     # STAGE 1: Calculate Category Quotas
     total = course.total_seats
+    reserved_pct = (course.quota_obc or 0.0) + (course.quota_sc or 0.0) + (course.quota_st or 0.0) + (course.quota_ews or 0.0)
+    if reserved_pct > 100.0:
+        return {"error": f"Course {course.name} reserved quotas ({reserved_pct}%) exceed 100%"}
+
     obc_seats = floor(total * (course.quota_obc / 100.0))
     sc_seats = floor(total * (course.quota_sc / 100.0))
     st_seats = floor(total * (course.quota_st / 100.0))
     ews_seats = floor(total * (course.quota_ews / 100.0))
     
     reserved_total = obc_seats + sc_seats + st_seats + ews_seats
-    open_seats = total - reserved_total
+    open_seats = max(0, total - reserved_total)
     
     # Get all pending records for this course
     candidates: List[AdmissionStaging] = db.query(AdmissionStaging).filter(
@@ -138,6 +142,21 @@ def allocate_seats_for_course(db: Session, course_id: int):
                 waitlist_pool.append(c)
         else:
             waitlist_pool.append(c)
+
+    # 3.3: Seat Conversion / Leftover Phase (Convert unfilled reserved seats to OPEN_MERIT)
+    unfilled_reserved = sum(q["limit"] - q["filled"] for q in quotas.values())
+    
+    if unfilled_reserved > 0 and waitlist_pool:
+        # waitlist_pool is already sorted by merit
+        # We can take the top 'unfilled_reserved' candidates and give them OPEN_MERIT seats
+        converted_candidates = waitlist_pool[:unfilled_reserved]
+        waitlist_pool = waitlist_pool[unfilled_reserved:]
+        
+        for c in converted_candidates:
+            c.final_admission_status = AdmissionStatus.ELIGIBLE_FOR_ADMISSION
+            c.allocated_seat_type = AllocatedSeatType.OPEN_MERIT
+            c.reason_code_logs = f"Eligible via Converted Quota Seat (Open Merit)"
+            stats["admitted_open"] += 1
             
     # STAGE 4: State Transition & Data Commitment for Waitlist
     # Note: waitlist_pool is already sorted by merit

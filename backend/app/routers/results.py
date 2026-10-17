@@ -24,10 +24,10 @@ class ReviewNote(BaseModel):
 
 
 # ── Bulk marks upload ─────────────────────────────────────────────────────────
-@router.post("/bulk", summary="Upload marks and calculate grades (admin)")
+@router.post("/bulk", summary="Upload marks and calculate grades (admin/faculty)")
 def bulk_results(
     file: UploadFile = File(...),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_faculty),
     db: Session = Depends(get_db),
 ):
     import pandas as pd, io
@@ -37,16 +37,31 @@ def bulk_results(
     content = loop.run_until_complete(file.read())
     loop.close()
 
+    if not content or len(content) == 0:
+        raise HTTPException(400, "Empty file uploaded.")
+    filename = (file.filename or "").lower()
+    if not (filename.endswith(".xlsx") or filename.endswith(".xls")):
+        raise HTTPException(400, "Invalid file type. Please upload an Excel file (.xlsx or .xls).")
+
     try:
         df = pd.read_excel(io.BytesIO(content))
+        if df.empty:
+            raise HTTPException(400, "Excel file is empty.")
         # Standardize columns
         df.columns = [c.strip().lower().replace(' ', '_') for c in df.columns]
         
         # Ensure enrollment_no is aliased properly if they use student_id
         if 'student_id' in df.columns and 'enrollment_no' not in df.columns:
             df['enrollment_no'] = df['student_id']
+
+        required_cols = ['enrollment_no', 'subject_name', 'internal_score', 'external_score']
+        missing = [c for c in required_cols if c not in df.columns]
+        if missing:
+            raise HTTPException(400, f"Missing required column(s): {', '.join(missing)}")
             
         records = df.where(df.notna(), None).to_dict(orient='records')
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(400, f"Could not parse Excel: {exc}")
         
@@ -185,30 +200,45 @@ def get_student_results(
     if current_user.role == UserRole.student and student.user_id != current_user.id:
         raise HTTPException(403, "Access denied")
 
-    q = db.query(StudentMarksRecord).filter(
-        StudentMarksRecord.student_id == student_id,
-        StudentMarksRecord.status == ResultStatus.published
-    )
+    if current_user.role == UserRole.student:
+        q = db.query(StudentMarksRecord).filter(
+            StudentMarksRecord.student_id == student_id,
+            StudentMarksRecord.status == ResultStatus.published
+        )
+    else:
+        q = db.query(StudentMarksRecord).filter(
+            StudentMarksRecord.student_id == student_id,
+            StudentMarksRecord.status != ResultStatus.rejected
+        )
     if semester:
         q = q.filter(StudentMarksRecord.semester_number == semester)
         
     records = q.all()
+
+    # Calculate dynamic SGPA and CGPA if any are None
+    computed_sgpa = result_service.compute_sgpa(records) if records else 0.0
+    computed_cgpa = result_service.compute_cgpa(db, student_id) if records else 0.0
     
     formatted = []
     for r in records:
+        sub_name = r.subject.subject_name if r.subject else "Subject"
+        sgpa_val = r.sgpa if (r.sgpa is not None and r.sgpa > 0) else computed_sgpa
+        cgpa_val = r.cgpa if (r.cgpa is not None and r.cgpa > 0) else (computed_cgpa or computed_sgpa)
         formatted.append({
             "id": r.id,
-            "subject": r.subject.subject_name,
-            "internal_score": r.internal_score,
-            "external_score": r.external_score,
-            "total_marks_obtained": r.total_marks_obtained,
+            "subject": sub_name,
+            "subject_name": sub_name,
+            "internal_score": float(r.internal_score or 0.0),
+            "external_score": float(r.external_score or 0.0),
+            "total_marks_obtained": float(r.total_marks_obtained or 0.0),
             "grade_letter": r.grade_letter,
             "grade_points": r.grade_points,
             "pass_status": r.pass_status,
             "semester": r.semester_number,
             "academic_year": r.academic_year,
-            "sgpa": r.sgpa,
-            "cgpa": r.cgpa
+            "sgpa": round(float(sgpa_val), 2),
+            "cgpa": round(float(cgpa_val), 2),
+            "status": r.status.value if hasattr(r.status, 'value') else str(r.status),
         })
         
     return {"success": True, "data": formatted}
@@ -228,9 +258,11 @@ def download_marksheet_pdf(
     if current_user.role == UserRole.student and student.user_id != current_user.id:
         raise HTTPException(403, "Access denied")
 
+    valid_statuses = [ResultStatus.published] if current_user.role == UserRole.student else [ResultStatus.published, ResultStatus.approved, ResultStatus.pending]
     records = db.query(StudentMarksRecord).filter(
         StudentMarksRecord.student_id == student_id,
-        StudentMarksRecord.semester_number == semester
+        StudentMarksRecord.semester_number == semester,
+        StudentMarksRecord.status.in_(valid_statuses)
     ).all()
 
     if not records:

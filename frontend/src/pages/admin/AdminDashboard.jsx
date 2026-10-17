@@ -2,7 +2,7 @@
  * pages/admin/AdminDashboard.jsx — Admin home with stats overview.
  */
 import React from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { useNavigate, Routes, Route } from 'react-router-dom'
 import DashboardLayout from '../../components/layout/DashboardLayout'
 import Card from '../../components/common/Card'
 import { useAuth } from '../../contexts/AuthContext'
@@ -17,6 +17,7 @@ import AdminCourses from './AdminCourses'
 import AdminFees from './AdminFees'
 import AdminBotLogs from './AdminBotLogs'
 import AdminNotifications from './AdminNotifications'
+import AdminRPAControl from './AdminRPAControl'
 
 const SIDEBAR_ITEMS = [
   { section: 'Main',      to: '/dashboard/admin',             label: 'Overview',       icon: '⊞', exact: true },
@@ -28,7 +29,8 @@ const SIDEBAR_ITEMS = [
   {                        to: '/dashboard/admin/faculty',     label: 'Faculty',        icon: '👨‍🏫' },
   {                        to: '/dashboard/admin/departments', label: 'Departments',    icon: '🏛' },
   {                        to: '/dashboard/admin/fees',        label: 'Fees',           icon: '💰' },
-  { section: 'System',    to: '/dashboard/admin/bot-logs',    label: 'Bot Run Logs',   icon: '🤖' },
+  { section: 'System',    to: '/dashboard/admin/rpa-control',  label: '⚡ RPA Control',   icon: '🤖' },
+  {                        to: '/dashboard/admin/bot-logs',    label: 'Bot Run Logs',   icon: '📜' },
   {                        to: '/dashboard/admin/notifications',label:'Notifications',  icon: '🔔' },
 ]
 
@@ -50,6 +52,7 @@ export default function AdminDashboard() {
         <Route path="departments" element={<AdminDepartments />} />
         <Route path="fees" element={<AdminFees />} />
         <Route path="bot-logs" element={<AdminBotLogs />} />
+        <Route path="rpa-control" element={<AdminRPAControl />} />
         <Route path="notifications" element={<AdminNotifications />} />
       </Routes>
     </DashboardLayout>
@@ -68,6 +71,7 @@ function Placeholder({ title, desc }) {
 }
 
 function AdminOverview({ user }) {
+  const navigate = useNavigate()
   const [statsData, setStatsData] = React.useState([
     { label: 'Total Students',   value: '—', icon: '🎓', color: 'var(--color-primary-light)',   iconColor: 'var(--color-primary)' },
     { label: 'Faculty Members',  value: '—', icon: '👨‍🏫', color: '#F0FDF4', iconColor: 'var(--color-success)' },
@@ -93,6 +97,38 @@ function AdminOverview({ user }) {
     fetchStats()
   }, [])
 
+  const quickActions = [
+    {
+      icon: '🎓', title: 'Admission Bot',
+      desc: 'Upload Excel → auto-create student accounts, enrollment IDs & PDF letters.',
+      path: '/dashboard/admin/admission',
+      btnLabel: 'Open Admission Workflow',
+      color: '#1A56DB', colorLight: '#EBF1FF',
+    },
+    {
+      icon: '📋', title: 'Attendance Bot',
+      desc: 'Bulk-upload attendance, compute rolling %, fire low-attendance warnings.',
+      path: '/dashboard/admin/attendance',
+      btnLabel: 'Open Attendance Workflow',
+      color: '#15803D', colorLight: '#F0FDF4',
+    },
+    {
+      icon: '📊', title: 'Results Bot',
+      desc: 'Process marks, dual-threshold grading, compute SGPA/CGPA, publish results.',
+      path: '/dashboard/admin/results',
+      btnLabel: 'Open Results Workflow',
+      color: '#B45309', colorLight: '#FFFBEB',
+    },
+    {
+      icon: '🤖', title: 'RPA Control Center',
+      desc: 'Trigger all Robot Framework bots, watch live step progress, audit run history.',
+      path: '/dashboard/admin/rpa-control',
+      btnLabel: '⚡ Launch RPA Control',
+      color: '#7C3AED', colorLight: '#F5F3FF',
+      highlight: true,
+    },
+  ]
+
   return (
     <>
       <div className="page-header">
@@ -117,29 +153,35 @@ function AdminOverview({ user }) {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--space-5)' }}>
-        <Card title="Admission Automation" subtitle="Upload Excel → bulk-process admissions">
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-4)' }}>
-            Run the admission bot to auto-create student accounts, generate enrollment numbers, and send confirmation emails.
-          </p>
-        </Card>
-
-        <Card title="Attendance Automation" subtitle="Upload attendance Excel files">
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-4)' }}>
-            Bulk-upload attendance, auto-calculate percentages, and send low-attendance warning emails to students.
-          </p>
-        </Card>
-
-        <Card title="Result Processing" subtitle="Grade calculation & marksheets">
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-4)' }}>
-            Process marks Excel, compute SGPA/CGPA, generate PDF marksheets, and publish results with email notification.
-          </p>
-        </Card>
-
-        <Card title="Bot Run Logs" subtitle="Audit every automation run">
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-4)' }}>
-            View execution history, records processed, duration, and links to Robot Framework HTML logs.
-          </p>
-        </Card>
+        {quickActions.map(qa => (
+          <div key={qa.title} style={{
+            background: '#fff',
+            border: qa.highlight ? `2px solid ${qa.color}40` : '1px solid var(--color-border)',
+            borderRadius: '12px', padding: '20px',
+            boxShadow: qa.highlight ? `0 4px 16px ${qa.color}15` : 'var(--shadow-xs)',
+            display: 'flex', flexDirection: 'column', gap: '12px',
+          }}>
+            <div style={{
+              width: 44, height: 44, borderRadius: '10px',
+              background: qa.colorLight, fontSize: '1.4rem',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>{qa.icon}</div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#111827' }}>{qa.title}</div>
+              <div style={{ fontSize: '0.8rem', color: '#6B7280', marginTop: 4, lineHeight: 1.5 }}>{qa.desc}</div>
+            </div>
+            <button
+              onClick={() => navigate(qa.path)}
+              style={{
+                marginTop: 'auto', padding: '8px 14px',
+                borderRadius: '7px', border: 'none',
+                background: qa.color, color: '#fff',
+                fontWeight: 600, fontSize: '0.8rem',
+                cursor: 'pointer', textAlign: 'left',
+              }}
+            >{qa.btnLabel} →</button>
+          </div>
+        ))}
       </div>
     </>
   )

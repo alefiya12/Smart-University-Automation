@@ -47,23 +47,35 @@ def compute_grade_dual_threshold(internal: float, external: float) -> Tuple[bool
 
 
 def compute_sgpa(results: List[StudentMarksRecord]) -> float:
-    """Compute SGPA for a list of StudentMarksRecord objects."""
-    total_credits = sum(r.subject.credits for r in results if r.grade_letter != 'F')
-    weighted = sum(r.subject.credits * r.grade_points for r in results)
-    return round(weighted / total_credits, 2) if total_credits > 0 else 0.0
+    """Compute SGPA using standard credit-weighted grade points: sum(credits * grade_points) / sum(credits)."""
+    if not results:
+        return 0.0
+    total_credits = sum(float(r.subject.credits if (r.subject and r.subject.credits) else 4.0) for r in results)
+    if total_credits == 0:
+        return 0.0
+    total_weighted_points = sum(
+        float(r.subject.credits if (r.subject and r.subject.credits) else 4.0) * float(r.grade_points or 0)
+        for r in results
+    )
+    return round(total_weighted_points / total_credits, 2)
 
 
 def compute_cgpa(db: Session, student_id: int) -> float:
-    """Compute CGPA across all published semesters."""
+    """Compute CGPA across all published semesters using credit-weighted grade points."""
     published = db.query(StudentMarksRecord).filter(
         StudentMarksRecord.student_id == student_id,
         StudentMarksRecord.status == ResultStatus.published,
     ).all()
     if not published:
         return 0.0
-    total_credits = sum(r.subject.credits for r in published if r.grade_letter != 'F')
-    weighted = sum(r.subject.credits * r.grade_points for r in published)
-    return round(weighted / total_credits, 2) if total_credits > 0 else 0.0
+    total_credits = sum(float(r.subject.credits if (r.subject and r.subject.credits) else 4.0) for r in published)
+    if total_credits == 0:
+        return 0.0
+    total_weighted_points = sum(
+        float(r.subject.credits if (r.subject and r.subject.credits) else 4.0) * float(r.grade_points or 0)
+        for r in published
+    )
+    return round(total_weighted_points / total_credits, 2)
 
 
 def publish_student_results(db: Session, student_id: int, semester: int) -> dict:
@@ -118,7 +130,7 @@ def publish_student_results(db: Session, student_id: int, semester: int) -> dict
         try:
             pdf_path = generate_marksheet(
                 enrollment_no=student.enrollment_no,
-                student_name=user.username,
+                student_name=student.full_name or user.username,
                 department=dept.name if dept else "",
                 course=course.name if course else "",
                 semester=semester,
@@ -173,16 +185,22 @@ def process_bulk_results(db: Session, records: List[dict], triggered_by: str = "
                 subject_name = str(rec.get('subject_name', '')).strip()
                 
                 try:
-                    internal = float(rec.get('internal_score', 0))
-                    external = float(rec.get('external_score', 0))
-                except ValueError:
-                    raise ValueError(f"Row {idx+1}: Invalid score format for {enrollment}")
+                    raw_internal = rec.get('internal_score')
+                    raw_external = rec.get('external_score')
+                    if raw_internal is None or str(raw_internal).strip() == '':
+                        raise ValueError(f"Row {idx+1}: Blank internal score for {enrollment}")
+                    if raw_external is None or str(raw_external).strip() == '':
+                        raise ValueError(f"Row {idx+1}: Blank external score for {enrollment}")
+                    internal = float(raw_internal)
+                    external = float(raw_external)
+                except (ValueError, TypeError) as ex:
+                    raise ValueError(f"Row {idx+1}: Invalid score format for {enrollment}: {str(ex)}")
                 
                 # Bounds check
-                if internal > 30.00:
-                    raise ValueError(f"Row {idx+1}: Internal score {internal} exceeds max 30 for {enrollment}")
-                if external > 70.00:
-                    raise ValueError(f"Row {idx+1}: External score {external} exceeds max 70 for {enrollment}")
+                if internal < 0.0 or internal > 30.00:
+                    raise ValueError(f"Row {idx+1}: Internal score {internal} out of bounds (0-30) for {enrollment}")
+                if external < 0.0 or external > 70.00:
+                    raise ValueError(f"Row {idx+1}: External score {external} out of bounds (0-70) for {enrollment}")
                 
                 # Fetch Student
                 student = db.query(Student).filter(Student.enrollment_no == enrollment).first()

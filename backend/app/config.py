@@ -1,6 +1,6 @@
 from pathlib import Path
 from pydantic_settings import BaseSettings
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from typing import Optional
 
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     # RPA / Logs
     ROBOT_LOG_DIR: str = "../logs"
     ROBOT_REPORTS_DIR: str = "../reports"
+
+    @model_validator(mode="after")
+    def validate_production_security(self):
+        if not self.DEBUG and (not self.JWT_SECRET_KEY or self.JWT_SECRET_KEY == "dev-secret-change-in-production"):
+            raise ValueError("JWT_SECRET_KEY must be set to a secure custom secret when DEBUG is disabled.")
+        return self
 
     model_config = {"env_file": ".env", "case_sensitive": True}
 

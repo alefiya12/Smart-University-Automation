@@ -137,6 +137,11 @@ async function runLiveShowcase() {
         hud: 'Financial Ledger: Invoice tracking and payment receipts'
       },
       {
+        name: '⚡ Real-time RPA Bot Control & Orchestration Center',
+        url: '/dashboard/admin/rpa-control',
+        hud: 'RPA Control Center: One-click bot triggers, live progress steps & Robot Framework execution'
+      },
+      {
         name: 'RPA Bot Execution Audit Logs',
         url: '/dashboard/admin/bot-logs',
         hud: 'RPA Bot Audit Center: Robot Framework execution logs & HTML viewers'

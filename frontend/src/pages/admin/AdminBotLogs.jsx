@@ -156,8 +156,19 @@ export default function AdminBotLogs() {
                     <td style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
                       {log.started_at ? new Date(log.started_at).toLocaleString() : '-'}
                     </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <Button variant="secondary" size="sm" onClick={() => handleDownloadReport(log.id)}>View Report</Button>
+                    <td style={{ textAlign: 'right', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                      {log.error_message && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => alert(`Error Log:\n\n${log.error_message}`)}
+                        >
+                          View Error
+                        </Button>
+                      )}
+                      {(log.report_file_path || log.log_file_path) && (
+                        <Button variant="secondary" size="sm" onClick={() => handleDownloadReport(log.id)}>View Report</Button>
+                      )}
                     </td>
                   </tr>
                 ))

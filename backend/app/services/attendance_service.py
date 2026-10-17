@@ -145,11 +145,16 @@ def process_bulk_attendance_excel(
                     date_subject_lectures[att_date] = set()
                 date_subject_lectures[att_date].add(subject.id)
                 
-                # Update StudentSubjectSummary
-                summary = db.query(StudentSubjectSummary).filter(
-                    StudentSubjectSummary.student_id == student.id,
-                    StudentSubjectSummary.subject_id == subject.id
-                ).first()
+                # Update StudentSubjectSummary safely using session cache
+                summary_key = (student.id, subject.id)
+                if not hasattr(db, '_summary_cache'):
+                    db._summary_cache = {}
+                summary = db._summary_cache.get(summary_key)
+                if not summary:
+                    summary = db.query(StudentSubjectSummary).filter(
+                        StudentSubjectSummary.student_id == student.id,
+                        StudentSubjectSummary.subject_id == subject.id
+                    ).first()
                 
                 if not summary:
                     summary = StudentSubjectSummary(
@@ -159,6 +164,8 @@ def process_bulk_attendance_excel(
                         cumulative_percentage=0.0
                     )
                     db.add(summary)
+                    db.flush()
+                db._summary_cache[summary_key] = summary
                 
                 if status_enum == DailyAttendanceStatus.Present:
                     summary.lectures_attended += 1
@@ -200,20 +207,35 @@ def process_bulk_attendance_excel(
                     
                 summ.cumulative_percentage = round(pct, 2)
                 
-                if pct < threshold:
+                if pct <= 60.0:
+                    summ.attendance_warning_flag = True
+                    summ.dashboard_alert_message = f"CRITICAL ALERT: Your attendance in {summ.subject.subject_name} is {pct:.1f}%, critically below the 60.0% debarment threshold."
+                elif pct < threshold:
                     summ.attendance_warning_flag = True
                     summ.dashboard_alert_message = f"Warning: Your attendance in {summ.subject.subject_name} is {pct:.1f}%, which is below the required {threshold}%."
-                    
-                    # Create notification
-                    notif = Notification(
-                        student_id=summ.student_id,
-                        title=f"Low Attendance: {summ.subject.subject_name}",
-                        message=summ.dashboard_alert_message,
-                        notification_type=NotificationType.in_app,
-                        category=NotificationCategory.attendance_warning,
-                        status=NotificationStatus.sent,
-                    )
-                    db.add(notif)
+                else:
+                    summ.attendance_warning_flag = False
+                    summ.dashboard_alert_message = None
+
+                if summ.attendance_warning_flag:
+                    # Create notification if no unread warning exists
+                    existing_notif = db.query(Notification).filter(
+                        Notification.student_id == summ.student_id,
+                        Notification.title == f"Low Attendance: {summ.subject.subject_name}",
+                        Notification.category == NotificationCategory.attendance_warning,
+                        Notification.is_read == False
+                    ).first()
+
+                    if not existing_notif:
+                        notif = Notification(
+                            student_id=summ.student_id,
+                            title=f"Low Attendance: {summ.subject.subject_name}",
+                            message=summ.dashboard_alert_message,
+                            notification_type=NotificationType.in_app,
+                            category=NotificationCategory.attendance_warning,
+                            status=NotificationStatus.sent,
+                        )
+                        db.add(notif)
                     
                     # Also optionally send email
                     user = db.query(User).filter(User.id == summ.student.user_id).first()
@@ -251,37 +273,179 @@ def process_bulk_attendance_excel(
     run_log.error_message = '\n'.join(errors) if errors else None
     
     # Save run_log safely (especially if rollback happened)
-    # The run_log instance is already in this session, but rollback detached or discarded state if it wasn't committed fully,
-    # though we committed it at the start. So we can just merge and commit.
     run_log = db.merge(run_log)
     db.commit()
 
     return {'bot_run_id': run_log.id, 'total': len(records), 'succeeded': succeeded, 'failed': failed, 'errors': errors}
 
 def get_student_subject_summaries(db: Session, student_id: int):
-    """Fetch dashboard summaries for a student."""
+    """Fetch accurate, strictly deduplicated dashboard attendance summaries for a student."""
+    student = db.query(Student).filter(Student.id == student_id).first()
+    threshold = student.course.min_attendance_pct if (student and student.course and student.course.min_attendance_pct) else 75.0
+
     summaries = db.query(StudentSubjectSummary).filter(StudentSubjectSummary.student_id == student_id).all()
     res = []
+    seen_subject_ids = set()
+    seen_subject_names = set()
+
     for s in summaries:
+        if not s.subject:
+            continue
+        sub_name = s.subject.subject_name.strip()
+        norm_key = sub_name.lower()
+        if norm_key in seen_subject_names:
+            continue
+        seen_subject_names.add(norm_key)
+        seen_subject_ids.add(s.subject_id)
+
+        # Count actual attendance logs for this student and subject
+        actual_attended = db.query(DailyAttendanceLog).filter(
+            DailyAttendanceLog.student_id == student_id,
+            DailyAttendanceLog.subject_id == s.subject_id,
+            DailyAttendanceLog.status == DailyAttendanceStatus.Present
+        ).count()
+
+        actual_total_logs = db.query(DailyAttendanceLog).filter(
+            DailyAttendanceLog.student_id == student_id,
+            DailyAttendanceLog.subject_id == s.subject_id
+        ).count()
+
+        # Distinct dates when this subject was taught
+        distinct_dates = db.query(func.count(func.distinct(DailyAttendanceLog.date))).filter(
+            DailyAttendanceLog.subject_id == s.subject_id
+        ).scalar() or 0
+
+        # Best estimate of total conducted
+        total_conducted = max(
+            actual_total_logs,
+            distinct_dates,
+            s.subject.total_lectures_conducted if s.subject else 0,
+            s.lectures_attended if s.lectures_attended else 0,
+            1 if actual_attended > 0 else 0
+        )
+
+        attended = actual_attended if actual_total_logs > 0 else (s.lectures_attended or 0)
+        pct = round((attended / total_conducted * 100.0), 1) if total_conducted > 0 else 0.0
+
+        is_warning = pct < threshold if total_conducted > 0 else False
+        alert_msg = (
+            f"Warning: Your attendance in {sub_name} is {pct:.1f}%, below the required {threshold}% threshold."
+            if is_warning else None
+        )
+
         res.append({
-            "subject": s.subject.subject_name,
-            "total_classes": s.subject.total_lectures_conducted,
-            "present": s.lectures_attended,
-            "absent": s.subject.total_lectures_conducted - s.lectures_attended,
-            "percentage": s.cumulative_percentage,
-            "warning": s.attendance_warning_flag,
-            "alert": s.dashboard_alert_message
+            "id": s.id,
+            "subject_id": s.subject_id,
+            "subject_name": sub_name,
+            "subject": sub_name,
+            "semester": s.subject.semester or (student.semester if student else 1),
+            "total_conducted": total_conducted,
+            "total_classes": total_conducted,
+            "lectures_attended": attended,
+            "present": attended,
+            "absent": max(0, total_conducted - attended),
+            "percentage": pct,
+            "cumulative_percentage": pct,
+            "warning_flag": is_warning,
+            "warning": is_warning,
+            "dashboard_alert_message": alert_msg,
+            "alert": alert_msg,
         })
+
+    # If student has daily logs for subjects not yet in StudentSubjectSummary, include them
+    unsummarized_logs = db.query(DailyAttendanceLog.subject_id).filter(
+        DailyAttendanceLog.student_id == student_id
+    ).distinct().all()
+
+    for (sub_id,) in unsummarized_logs:
+        if sub_id in seen_subject_ids:
+            continue
+        sub = db.query(CourseSubject).filter(CourseSubject.id == sub_id).first()
+        if not sub:
+            continue
+        sub_name = sub.subject_name.strip()
+        norm_key = sub_name.lower()
+        if norm_key in seen_subject_names:
+            continue
+        seen_subject_names.add(norm_key)
+        seen_subject_ids.add(sub.id)
+
+        actual_attended = db.query(DailyAttendanceLog).filter(
+            DailyAttendanceLog.student_id == student_id,
+            DailyAttendanceLog.subject_id == sub_id,
+            DailyAttendanceLog.status == DailyAttendanceStatus.Present
+        ).count()
+
+        actual_total = db.query(DailyAttendanceLog).filter(
+            DailyAttendanceLog.student_id == student_id,
+            DailyAttendanceLog.subject_id == sub_id
+        ).count()
+
+        distinct_dates = db.query(func.count(func.distinct(DailyAttendanceLog.date))).filter(
+            DailyAttendanceLog.subject_id == sub_id
+        ).scalar() or 0
+
+        total_conducted = max(actual_total, distinct_dates, sub.total_lectures_conducted, 1)
+        pct = round((actual_attended / total_conducted * 100.0), 1) if total_conducted > 0 else 0.0
+        is_warning = pct < threshold if total_conducted > 0 else False
+
+        res.append({
+            "id": None,
+            "subject_id": sub.id,
+            "subject_name": sub_name,
+            "subject": sub_name,
+            "semester": sub.semester or (student.semester if student else 1),
+            "total_conducted": total_conducted,
+            "total_classes": total_conducted,
+            "lectures_attended": actual_attended,
+            "present": actual_attended,
+            "absent": max(0, total_conducted - actual_attended),
+            "percentage": pct,
+            "cumulative_percentage": pct,
+            "warning_flag": is_warning,
+            "warning": is_warning,
+            "dashboard_alert_message": f"Warning: Your attendance in {sub_name} is {pct:.1f}%, below {threshold}%." if is_warning else None,
+            "alert": f"Warning: Your attendance in {sub_name} is {pct:.1f}%, below {threshold}%." if is_warning else None,
+        })
+
     return res
 
 def get_student_daily_logs(db: Session, student_id: int):
-    logs = db.query(DailyAttendanceLog).filter(DailyAttendanceLog.student_id == student_id).order_by(DailyAttendanceLog.date.desc()).all()
+    """Return chronological daily attendance logs with standardized date and badge fields."""
+    logs = db.query(DailyAttendanceLog).filter(
+        DailyAttendanceLog.student_id == student_id
+    ).order_by(DailyAttendanceLog.date.desc(), DailyAttendanceLog.id.desc()).all()
+    
     res = []
     for l in logs:
+        sub_name = l.subject.subject_name.strip() if l.subject else "Subject"
+        sem = l.subject.semester if (l.subject and l.subject.semester) else 1
+        
+        # Standardize readable date formatting
+        dt_raw = l.date
+        date_iso = str(dt_raw)
+        formatted_date = date_iso
+        day_of_week = ""
+        try:
+            if isinstance(dt_raw, str):
+                p_date = datetime.strptime(dt_raw, "%Y-%m-%d").date()
+            else:
+                p_date = dt_raw
+            formatted_date = p_date.strftime("%d %b %Y")  # e.g., '01 Sep 2026'
+            day_of_week = p_date.strftime("%A")          # e.g., 'Tuesday'
+        except Exception:
+            pass
+
+        status_str = l.status.value if hasattr(l.status, 'value') else str(l.status)
         res.append({
             "id": l.id,
-            "subject": l.subject.subject_name,
-            "date": str(l.date),
-            "status": l.status.value
+            "subject": sub_name,
+            "subject_name": sub_name,
+            "semester": sem,
+            "date": date_iso,
+            "formatted_date": formatted_date,
+            "day_of_week": day_of_week,
+            "status": status_str,
+            "session_type": "Regular Lecture",
         })
     return res

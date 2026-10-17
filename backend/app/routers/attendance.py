@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, s
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.utils.deps import require_admin, require_verified
+from app.utils.deps import require_admin, require_faculty, require_verified
 from app.models.user import User, UserRole
 from app.models.student import Student
 from app.services import attendance_service
@@ -15,18 +15,26 @@ router = APIRouter(prefix="/api/attendance", tags=["Attendance"])
 
 
 # ── Bulk via Excel upload (Subject-Wise) ──────────────────────────────────────
-@router.post("/bulk/upload", summary="Upload subject-wise attendance Excel (admin)")
+@router.post("/bulk/upload", summary="Upload subject-wise attendance Excel (admin/faculty)")
 async def bulk_attendance_excel(
     course_id: int = Form(...),
     file: UploadFile = File(...),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_faculty),
     db: Session = Depends(get_db),
 ):
     import pandas as pd
     import io
     content = await file.read()
+    if not content or len(content) == 0:
+        raise HTTPException(400, "Empty file uploaded.")
+    filename = (file.filename or "").lower()
+    if not (filename.endswith(".xlsx") or filename.endswith(".xls")):
+        raise HTTPException(400, "Invalid file type. Please upload an Excel file (.xlsx or .xls).")
+
     try:
         df = pd.read_excel(io.BytesIO(content))
+        if df.empty:
+            raise HTTPException(400, "Excel file is empty.")
         # Keep headers exact but strip whitespace, except student_id and date which should be standardized
         new_cols = []
         for c in df.columns:
@@ -38,9 +46,14 @@ async def bulk_attendance_excel(
             else:
                 new_cols.append(c_str)
         df.columns = new_cols
+
+        if 'student_id' not in df.columns or 'date' not in df.columns:
+            raise HTTPException(400, "Missing required column(s): student_id and date are required.")
         
         # Replace NaN with None
         records = df.where(df.notna(), None).to_dict(orient='records')
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(400, f"Could not parse Excel: {exc}")
         

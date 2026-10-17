@@ -69,13 +69,21 @@ function StudentOverview({ user }) {
 
         // Attendance %
         const summaries = attRes.data.data || []
-        const totalLec = summaries.reduce((acc, s) => acc + s.total_conducted, 0)
-        const totalAtt = summaries.reduce((acc, s) => acc + s.lectures_attended, 0)
-        const attPct = totalLec > 0 ? `${((totalAtt / totalLec) * 100).toFixed(1)}%` : '100%'
+        const totalLec = summaries.reduce((acc, s) => acc + (s.total_conducted ?? s.total_classes ?? 0), 0)
+        const totalAtt = summaries.reduce((acc, s) => acc + (s.lectures_attended ?? s.present ?? 0), 0)
+        let attPct = '—'
+        if (totalLec > 0) {
+          attPct = `${((totalAtt / totalLec) * 100).toFixed(1)}%`
+        } else if (summaries.length > 0) {
+          const avgPct = summaries.reduce((acc, s) => acc + (s.percentage ?? s.cumulative_percentage ?? 0), 0) / summaries.length
+          attPct = `${avgPct.toFixed(1)}%`
+        }
 
         // CGPA
         const results = resRes.data.data || []
-        const latestCgpa = results.length > 0 && results[0].cgpa !== null ? results[0].cgpa.toFixed(2) : '—'
+        const latestCgpa = results.length > 0 && results[0].cgpa !== null && results[0].cgpa !== undefined && Number(results[0].cgpa) > 0 
+          ? Number(results[0].cgpa).toFixed(2) 
+          : (results.length > 0 && results[0].sgpa !== null && results[0].sgpa !== undefined && Number(results[0].sgpa) > 0 ? Number(results[0].sgpa).toFixed(2) : '—')
 
         // Fees
         const fees = feeRes.data.data || []

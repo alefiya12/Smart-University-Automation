@@ -43,7 +43,7 @@ export default function AdminStudents() {
     const course = dept?.courses?.find(c => c.name === student.course)
 
     setEditForm({
-      full_name: student.username || '',
+      full_name: student.full_name || student.username || '',
       email: student.email || '',
       department_id: dept?.id || '',
       course_id: course?.id || '',
