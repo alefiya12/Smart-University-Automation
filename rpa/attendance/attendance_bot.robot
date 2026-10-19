@@ -34,6 +34,11 @@ Check And Send Low Attendance Warnings
 Suite Setup Steps
     ${exists}=    Run Keyword And Return Status    File Should Exist    ${EXCEL_PATH}
     IF    not ${exists}
-        Set Suite Variable    ${EXCEL_PATH}    ${CURDIR}${/}..${/}..${/}docs${/}sample_data${/}attendance_sample.xlsx
+        ${p1}=    Run Keyword And Return Status    File Should Exist    ${CURDIR}${/}..${/}..${/}backend${/}sample_data${/}03_Regular_Attendance_Matrix.xlsx
+        IF    ${p1}
+            Set Suite Variable    ${EXCEL_PATH}    ${CURDIR}${/}..${/}..${/}backend${/}sample_data${/}03_Regular_Attendance_Matrix.xlsx
+        ELSE
+            Set Suite Variable    ${EXCEL_PATH}    ${CURDIR}${/}..${/}..${/}docs${/}sample_data${/}attendance_sample.xlsx
+        END
     END
     File Should Exist    ${EXCEL_PATH}    msg=Attendance Excel not found: ${EXCEL_PATH}

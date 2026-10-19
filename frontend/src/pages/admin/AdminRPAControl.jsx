@@ -400,9 +400,10 @@ export default function AdminRPAControl() {
           display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px',
         }}>
           {[
-            { icon: '🎓', file: 'docs/sample_data/admission_sample.xlsx', desc: '8 student records across departments' },
-            { icon: '📋', file: 'docs/sample_data/attendance_sample.xlsx', desc: 'Subject-wise matrix per student per date' },
-            { icon: '📊', file: 'docs/sample_data/marks_sample.xlsx', desc: 'Internal+External marks per subject per semester' },
+            { icon: '🎓', file: 'backend/sample_data/01_Fresh_Admissions_Bulk_Upload.xlsx', desc: 'Direct Bulk Admission — 8 fresh student records' },
+            { icon: '🏛️', file: 'backend/sample_data/02_Seat_Allocation_Staging_Pool.xlsx', desc: 'Advanced Allocation Engine — 15 staged candidates' },
+            { icon: '📋', file: 'backend/sample_data/03_Regular_Attendance_Matrix.xlsx', desc: 'Subject-wise attendance matrix per student per date' },
+            { icon: '📊', file: 'backend/sample_data/05_Semester_Marks_and_Grades.xlsx', desc: 'Dual-threshold exam marks (Internal/30 + External/70)' },
           ].map(item => (
             <div key={item.file} style={{
               background: '#fff', border: '1px solid #E5E7EB',
@@ -415,6 +416,9 @@ export default function AdminRPAControl() {
               <div style={{ fontSize: '0.75rem', color: '#6B7280', marginTop: '4px' }}>{item.desc}</div>
             </div>
           ))}
+        </div>
+        <div style={{ fontSize: '0.75rem', color: '#6B7280', marginTop: '12px' }}>
+          💡 <em>All files are fully synchronized across <code>backend/sample_data/</code>, <code>sample_data/</code>, and <code>docs/sample_data/</code> for CLI, Web UI, and RPA bots.</em>
         </div>
       </div>
     </div>

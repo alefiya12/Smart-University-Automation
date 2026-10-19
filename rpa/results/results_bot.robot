@@ -38,6 +38,11 @@ Publish Approved Results
 Suite Setup Steps
     ${exists}=    Run Keyword And Return Status    File Should Exist    ${EXCEL_PATH}
     IF    not ${exists}
-        Set Suite Variable    ${EXCEL_PATH}    ${CURDIR}${/}..${/}..${/}docs${/}sample_data${/}marks_sample.xlsx
+        ${p1}=    Run Keyword And Return Status    File Should Exist    ${CURDIR}${/}..${/}..${/}backend${/}sample_data${/}05_Semester_Marks_and_Grades.xlsx
+        IF    ${p1}
+            Set Suite Variable    ${EXCEL_PATH}    ${CURDIR}${/}..${/}..${/}backend${/}sample_data${/}05_Semester_Marks_and_Grades.xlsx
+        ELSE
+            Set Suite Variable    ${EXCEL_PATH}    ${CURDIR}${/}..${/}..${/}docs${/}sample_data${/}marks_sample.xlsx
+        END
     END
     File Should Exist    ${EXCEL_PATH}    msg=Marks Excel not found: ${EXCEL_PATH}

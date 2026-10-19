@@ -1,15 +1,41 @@
 """
 generate_complete_testing_suite.py
 Generates comprehensive, database-aligned Excel test files for the Smart University Automation System.
+Outputs to:
+  1. backend/sample_data/ (standard API and backend sample folder)
+  2. sample_data/         (root project folder)
+  3. docs/sample_data/    (documentation and legacy bot runner folder)
 """
 import os
+import sqlite3
 import pandas as pd
 from datetime import date
 
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "sample_data")
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.abspath(os.path.join(_HERE, ".."))
 
-print("Starting generation of complete testing Excel suite...")
+TARGET_DIRS = [
+    os.path.join(_HERE, "sample_data"),
+    os.path.join(_PROJECT_ROOT, "sample_data"),
+    os.path.join(_PROJECT_ROOT, "docs", "sample_data"),
+]
+
+for d in TARGET_DIRS:
+    os.makedirs(d, exist_ok=True)
+
+print("Starting generation of unified testing Excel suite across all sample_data directories...")
+
+# Fetch existing emails from DB to ensure fresh admissions have 0 duplicates
+db_path = os.path.join(_HERE, "smartuniversity.db")
+existing_emails = set()
+if os.path.exists(db_path):
+    try:
+        conn = sqlite3.connect(db_path)
+        c = conn.cursor()
+        existing_emails = {r[0].lower() for r in c.execute("SELECT email FROM users").fetchall()}
+        conn.close()
+    except Exception as exc:
+        print(f"Warning: Could not check existing users: {exc}")
 
 # ==============================================================================
 # 1. Fresh Bulk Admissions Upload (New, Unregistered Students)
@@ -17,83 +43,31 @@ print("Starting generation of complete testing Excel suite...")
 # Route: POST /api/admission/bulk/upload (Admin -> Admission -> Direct Bulk Upload)
 # Required columns: full_name, email
 # Optional columns: department_name, course_name, semester, phone, address
-df_admissions = pd.DataFrame([
-    {
-        "full_name": "Aditya Kapoor",
-        "email": "aditya.kapoor@freshadmit.edu",
-        "department_name": "Computer Science and Engineering",
-        "course_name": "B.Tech CSE",
-        "semester": 1,
-        "phone": "9811122201",
-        "address": "42 Cyber City, Gurgaon, Haryana"
-    },
-    {
-        "full_name": "Neha Verma",
-        "email": "neha.verma@freshadmit.edu",
-        "department_name": "Computer Science and Engineering",
-        "course_name": "B.Tech CSE",
-        "semester": 1,
-        "phone": "9811122202",
-        "address": "15 Civil Lines, Jaipur, Rajasthan"
-    },
-    {
-        "full_name": "Karan Malhotra",
-        "email": "karan.malhotra@freshadmit.edu",
-        "department_name": "Information Technology",
-        "course_name": "B.Tech IT",
-        "semester": 1,
-        "phone": "9811122203",
-        "address": "88 Mall Road, Shimla, Himachal Pradesh"
-    },
-    {
-        "full_name": "Tanvi Joshi",
-        "email": "tanvi.joshi@freshadmit.edu",
-        "department_name": "Information Technology",
-        "course_name": "B.Tech IT",
-        "semester": 1,
-        "phone": "9811122204",
-        "address": "24 FC Road, Pune, Maharashtra"
-    },
-    {
-        "full_name": "Rishi Nair",
-        "email": "rishi.nair@freshadmit.edu",
-        "department_name": "Computer Applications",
-        "course_name": "Master of Computer Applications",
-        "semester": 1,
-        "phone": "9811122205",
-        "address": "104 Marine Drive, Kochi, Kerala"
-    },
-    {
-        "full_name": "Simran Kaur",
-        "email": "simran.kaur@freshadmit.edu",
-        "department_name": "Computer Applications",
-        "course_name": "Master of Computer Applications",
-        "semester": 1,
-        "phone": "9811122206",
-        "address": "77 Sector 17, Chandigarh"
-    },
-    {
-        "full_name": "Gaurav Saxena",
-        "email": "gaurav.saxena@freshadmit.edu",
-        "department_name": "Computer Science and Engineering",
-        "course_name": "B.Tech CSE",
-        "semester": 1,
-        "phone": "9811122207",
-        "address": "12 Hazratganj, Lucknow, Uttar Pradesh"
-    },
-    {
-        "full_name": "Megha Agarwal",
-        "email": "megha.agarwal@freshadmit.edu",
-        "department_name": "Information Technology",
-        "course_name": "B.Tech IT",
-        "semester": 1,
-        "phone": "9811122208",
-        "address": "33 Park Street, Kolkata, West Bengal"
-    }
-])
-path_1 = os.path.join(OUTPUT_DIR, "01_Fresh_Admissions_Bulk_Upload.xlsx")
-df_admissions.to_excel(path_1, index=False)
-print(f"Generated: {path_1} ({len(df_admissions)} records)")
+potential_admissions = [
+    ("Aarav Roy",       "aarav.roy.test2026@university.edu",       "Computer Science and Engineering", "B.Tech CSE", 1, "9822001101", "404 Cyber City, Bengaluru, Karnataka"),
+    ("Pooja Hegde",     "pooja.hegde.test2026@university.edu",     "Computer Science and Engineering", "B.Tech CSE", 1, "9822001102", "12 Brigade Road, Bengaluru, Karnataka"),
+    ("Nikhil Chopra",   "nikhil.chopra.test2026@university.edu",   "Information Technology",           "B.Tech IT",  1, "9822001103", "77 Connaught Place, New Delhi"),
+    ("Anjali Deshmukh", "anjali.deshmukh.test2026@university.edu", "Information Technology",           "B.Tech IT",  1, "9822001104", "55 Shivaji Nagar, Pune, Maharashtra"),
+    ("Siddharth Sen",   "siddharth.sen.test2026@university.edu",   "Computer Applications",            "Master of Computer Applications", 1, "9822001105", "9 Salt Lake Sector V, Kolkata, WB"),
+    ("Kavita Pillai",   "kavita.pillai.test2026@university.edu",   "Computer Applications",            "Master of Computer Applications", 1, "9822001106", "18 MG Road, Thiruvananthapuram, Kerala"),
+    ("Varun Grover",    "varun.grover.test2026@university.edu",    "Computer Science and Engineering", "B.Tech CSE", 1, "9822001107", "63 Civil Lines, Nagpur, Maharashtra"),
+    ("Sneha Kulkarni",  "sneha.kulkarni.test2026@university.edu",  "Information Technology",           "B.Tech IT",  1, "9822001108", "21 Law College Road, Pune, Maharashtra"),
+]
+
+fresh_admissions = []
+for name, email, dept, course, sem, phone, addr in potential_admissions:
+    if email.lower() not in existing_emails:
+        fresh_admissions.append({
+            "full_name": name,
+            "email": email,
+            "department_name": dept,
+            "course_name": course,
+            "semester": sem,
+            "phone": phone,
+            "address": addr
+        })
+
+df_admissions = pd.DataFrame(fresh_admissions)
 
 
 # ==============================================================================
@@ -119,17 +93,12 @@ df_allocation = pd.DataFrame([
     {"Student_ID": "CAND-2026-114", "Student_Name": "Nandini Ghosh",   "Applied_Course": "MCA-2026", "Candidate_Category": "ST",  "Class_12_Pct": 65.0, "Entrance_Exam_Score": 58.0, "Core_Subject_Score": 60.0, "Date_Of_Birth": "2003-07-07"},
     {"Student_ID": "CAND-2026-115", "Student_Name": "Omkar Deshmukh",  "Applied_Course": "MCA-2026", "Candidate_Category": "GEN", "Class_12_Pct": 68.0, "Entrance_Exam_Score": 55.0, "Core_Subject_Score": 56.0, "Date_Of_Birth": "2004-03-31"}
 ])
-path_2 = os.path.join(OUTPUT_DIR, "02_Seat_Allocation_Staging_Pool.xlsx")
-df_allocation.to_excel(path_2, index=False)
-print(f"Generated: {path_2} ({len(df_allocation)} records)")
 
 
 # ==============================================================================
 # 3. Regular Attendance Matrix Bulk Upload (Healthy 80-100% Attendance)
 # ==============================================================================
 # Route: POST /api/attendance/bulk/upload (Faculty -> Attendance / Admin -> Attendance)
-# Course ID: 1 (MCA)
-# Required columns: student_id, date, <Subject_Columns...>
 dates = ["2026-10-15", "2026-10-16", "2026-10-17", "2026-10-18", "2026-10-19"]
 students_mca = ["SU2026-0001", "SU2026-0002", "SU2026-0003", "SU2026-0010", "SU2026-0014"]
 
@@ -145,15 +114,11 @@ for d in dates:
         })
 
 df_attendance_healthy = pd.DataFrame(att_rows)
-path_3 = os.path.join(OUTPUT_DIR, "03_Regular_Attendance_Matrix.xlsx")
-df_attendance_healthy.to_excel(path_3, index=False)
-print(f"Generated: {path_3} ({len(df_attendance_healthy)} records)")
 
 
 # ==============================================================================
 # 4. Critical Low Attendance Edge Case (Triggers < 75% & < 60% Debarment Alerts)
 # ==============================================================================
-# Consecutive absents for SU2026-0004 & SU2026-0005 to trigger system alerts
 low_att_rows = []
 dates_extended = [
     "2026-10-10", "2026-10-11", "2026-10-12", "2026-10-13",
@@ -161,7 +126,6 @@ dates_extended = [
     "2026-10-18", "2026-10-19"
 ]
 for i, d in enumerate(dates_extended):
-    # SU2026-0004 attends only 4 out of 10 days = 40% (Critical Alert < 60%)
     low_att_rows.append({
         "student_id": "SU2026-0004",
         "date": d,
@@ -169,7 +133,6 @@ for i, d in enumerate(dates_extended):
         "Mathematics": "Present" if i < 4 else "Absent",
         "Geography": "Present" if i < 4 else "Absent"
     })
-    # SU2026-0005 attends 7 out of 10 days = 70% (Warning Alert < 75%)
     low_att_rows.append({
         "student_id": "SU2026-0005",
         "date": d,
@@ -179,75 +142,89 @@ for i, d in enumerate(dates_extended):
     })
 
 df_low_attendance = pd.DataFrame(low_att_rows)
-path_4 = os.path.join(OUTPUT_DIR, "04_Critical_Low_Attendance_EdgeCase.xlsx")
-df_low_attendance.to_excel(path_4, index=False)
-print(f"Generated: {path_4} ({len(df_low_attendance)} records)")
 
 
 # ==============================================================================
 # 5. Examination Results & Marks Upload (Passing & Honors Grades)
 # ==============================================================================
 # Route: POST /api/results/bulk (Faculty -> Upload Marks / Admin)
-# Columns: enrollment_no, subject_name, internal_score (max 30), external_score (max 70)
 marks_data = [
-    # Rahul Sharma (SU2026-0015)
-    {"enrollment_no": "SU2026-0015", "subject_name": "Physics",     "internal_score": 28.5, "external_score": 64.0}, # Total: 92.5 -> 'O'
-    {"enrollment_no": "SU2026-0015", "subject_name": "Mathematics", "internal_score": 26.0, "external_score": 58.5}, # Total: 84.5 -> 'A+'
-    {"enrollment_no": "SU2026-0015", "subject_name": "Geography",   "internal_score": 27.0, "external_score": 60.0}, # Total: 87.0 -> 'A+'
+    # SU2026-0001 (Student One)
+    {"enrollment_no": "SU2026-0001", "subject_name": "Physics",     "internal_score": 28.5, "external_score": 64.0, "semester": 1, "academic_year": "2026-27"},
+    {"enrollment_no": "SU2026-0001", "subject_name": "Mathematics", "internal_score": 26.0, "external_score": 58.5, "semester": 1, "academic_year": "2026-27"},
+    {"enrollment_no": "SU2026-0001", "subject_name": "Geography",   "internal_score": 27.0, "external_score": 60.0, "semester": 1, "academic_year": "2026-27"},
 
-    # Priya Singh (SU2026-0016)
-    {"enrollment_no": "SU2026-0016", "subject_name": "Physics",     "internal_score": 24.0, "external_score": 52.0}, # Total: 76.0 -> 'A'
-    {"enrollment_no": "SU2026-0016", "subject_name": "Mathematics", "internal_score": 22.5, "external_score": 48.0}, # Total: 70.5 -> 'B+'
-    {"enrollment_no": "SU2026-0016", "subject_name": "Geography",   "internal_score": 25.0, "external_score": 55.0}, # Total: 80.0 -> 'A+'
+    # SU2026-0002 (Student Two)
+    {"enrollment_no": "SU2026-0002", "subject_name": "Physics",     "internal_score": 24.0, "external_score": 52.0, "semester": 1, "academic_year": "2026-27"},
+    {"enrollment_no": "SU2026-0002", "subject_name": "Mathematics", "internal_score": 22.5, "external_score": 48.0, "semester": 1, "academic_year": "2026-27"},
+    {"enrollment_no": "SU2026-0002", "subject_name": "Geography",   "internal_score": 25.0, "external_score": 55.0, "semester": 1, "academic_year": "2026-27"},
 
-    # Amit Kumar (SU2026-0017)
-    {"enrollment_no": "SU2026-0017", "subject_name": "Physics",     "internal_score": 20.0, "external_score": 42.0}, # Total: 62.0 -> 'B'
-    {"enrollment_no": "SU2026-0017", "subject_name": "Mathematics", "internal_score": 18.0, "external_score": 38.0}, # Total: 56.0 -> 'C'
-    {"enrollment_no": "SU2026-0017", "subject_name": "Geography",   "internal_score": 21.0, "external_score": 45.0}, # Total: 66.0 -> 'B+'
+    # SU2026-0003 (Duplicate Student)
+    {"enrollment_no": "SU2026-0003", "subject_name": "Physics",     "internal_score": 20.0, "external_score": 42.0, "semester": 1, "academic_year": "2026-27"},
+    {"enrollment_no": "SU2026-0003", "subject_name": "Mathematics", "internal_score": 18.0, "external_score": 38.0, "semester": 1, "academic_year": "2026-27"},
+    {"enrollment_no": "SU2026-0003", "subject_name": "Geography",   "internal_score": 21.0, "external_score": 45.0, "semester": 1, "academic_year": "2026-27"},
 ]
 df_marks = pd.DataFrame(marks_data)
-path_5 = os.path.join(OUTPUT_DIR, "05_Semester_Marks_and_Grades.xlsx")
-df_marks.to_excel(path_5, index=False)
-print(f"Generated: {path_5} ({len(df_marks)} records)")
 
 
 # ==============================================================================
 # 6. Dual-Threshold Failure & Borderline Edge Case
 # ==============================================================================
-# Tests Dual-Threshold Academic Rule:
-# Must score >= 40% in Internal (>= 12.0/30) AND >= 40% in External (>= 28.0/70)
 dual_threshold_data = [
     # Case A: Passes total (68/100) but FAILS Internal (10.0 < 12.0) -> Must be 'F'
-    {"enrollment_no": "SU2026-0018", "subject_name": "Physics",     "internal_score": 10.0, "external_score": 58.0},
-
+    {"enrollment_no": "SU2026-0010", "subject_name": "Physics",     "internal_score": 10.0, "external_score": 58.0, "semester": 1, "academic_year": "2026-27"},
     # Case B: Passes total (52/100) and passes Internal (27/30) but FAILS External (25.0 < 28.0) -> Must be 'F'
-    {"enrollment_no": "SU2026-0018", "subject_name": "Mathematics", "internal_score": 27.0, "external_score": 25.0},
-
+    {"enrollment_no": "SU2026-0010", "subject_name": "Mathematics", "internal_score": 27.0, "external_score": 25.0, "semester": 1, "academic_year": "2026-27"},
     # Case C: Exact Borderline Pass: Exactly 12.0 Internal + 28.0 External = 40.0 -> Must be 'P'
-    {"enrollment_no": "SU2026-0018", "subject_name": "Geography",   "internal_score": 12.0, "external_score": 28.0},
-
+    {"enrollment_no": "SU2026-0010", "subject_name": "Geography",   "internal_score": 12.0, "external_score": 28.0, "semester": 1, "academic_year": "2026-27"},
     # Case D: High Distinction (O Grade)
-    {"enrollment_no": "SU2026-0019", "subject_name": "Physics",     "internal_score": 29.5, "external_score": 67.5},
+    {"enrollment_no": "SU2026-0014", "subject_name": "Physics",     "internal_score": 29.5, "external_score": 67.5, "semester": 1, "academic_year": "2026-27"},
 ]
 df_dual_threshold = pd.DataFrame(dual_threshold_data)
-path_6 = os.path.join(OUTPUT_DIR, "06_Dual_Threshold_Failing_Marks_EdgeCase.xlsx")
-df_dual_threshold.to_excel(path_6, index=False)
-print(f"Generated: {path_6} ({len(df_dual_threshold)} records)")
 
 
 # ==============================================================================
 # 7. Validation Boundary & Security Rejection Test File
 # ==============================================================================
-# Tests file rejection / error notification logic
-# Internal > 30, External > 70, negative numbers, missing data
 validation_data = [
-    {"enrollment_no": "SU2026-0020", "subject_name": "Physics",     "internal_score": 45.0, "external_score": 60.0}, # Out of bounds (internal > 30)
-    {"enrollment_no": "SU2026-0020", "subject_name": "Mathematics", "internal_score": 20.0, "external_score": 85.0}, # Out of bounds (external > 70)
-    {"enrollment_no": "SU2026-0020", "subject_name": "Geography",   "internal_score": -5.0, "external_score": 50.0}, # Negative score
+    {"enrollment_no": "SU2026-0010", "subject_name": "Physics",     "internal_score": 45.0, "external_score": 60.0}, # Out of bounds (internal > 30)
+    {"enrollment_no": "SU2026-0010", "subject_name": "Mathematics", "internal_score": 20.0, "external_score": 85.0}, # Out of bounds (external > 70)
+    {"enrollment_no": "SU2026-0010", "subject_name": "Geography",   "internal_score": -5.0, "external_score": 50.0}, # Negative score
 ]
 df_validation = pd.DataFrame(validation_data)
-path_7 = os.path.join(OUTPUT_DIR, "07_Invalid_Bounds_Validation_Test.xlsx")
-df_validation.to_excel(path_7, index=False)
-print(f"Generated: {path_7} ({len(df_validation)} records)")
 
-print("\nAll 7 test Excel files successfully generated in backend/sample_data/!")
+
+# ==============================================================================
+# Write to all target directories
+# ==============================================================================
+file_map = {
+    # Standard numbered test suite
+    "01_Fresh_Admissions_Bulk_Upload.xlsx": df_admissions,
+    "02_Seat_Allocation_Staging_Pool.xlsx": df_allocation,
+    "03_Regular_Attendance_Matrix.xlsx": df_attendance_healthy,
+    "04_Critical_Low_Attendance_EdgeCase.xlsx": df_low_attendance,
+    "05_Semester_Marks_and_Grades.xlsx": df_marks,
+    "06_Dual_Threshold_Failing_Marks_EdgeCase.xlsx": df_dual_threshold,
+    "07_Invalid_Bounds_Validation_Test.xlsx": df_validation,
+
+    # Convenience aliases for root & legacy references
+    "Sample_Admission.xlsx": df_admissions,
+    "Sample_Allocation_Staging.xlsx": df_allocation,
+    "Sample_Attendance.xlsx": df_attendance_healthy,
+    "Sample_Results.xlsx": df_marks,
+
+    # Docs aliases
+    "admission_sample.xlsx": df_admissions,
+    "attendance_sample.xlsx": df_attendance_healthy,
+    "marks_sample.xlsx": df_marks,
+}
+
+for target_dir in TARGET_DIRS:
+    for filename, df in file_map.items():
+        # Only write docs aliases in docs/ or root/backend if appropriate
+        out_path = os.path.join(target_dir, filename)
+        df.to_excel(out_path, index=False)
+
+print("✓ Successfully synchronized all test Excel spreadsheets across:")
+for d in TARGET_DIRS:
+    print(f"  ➜ {d}")
