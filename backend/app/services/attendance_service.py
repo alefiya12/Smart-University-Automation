@@ -116,7 +116,11 @@ def process_bulk_attendance_excel(
                     logger.warning(f"Semester mismatch skipped for {enrollment_no} (Sem {student.semester}) on subject {k} (Sem {subject.semester})")
                     continue
                     
-                status_val = int(v) if v is not None else 0
+                if isinstance(v, str):
+                    v_clean = v.strip().lower()
+                    status_val = 1 if v_clean in ["1", "present", "p", "true", "yes"] else 0
+                else:
+                    status_val = int(v) if v is not None else 0
                 status_enum = DailyAttendanceStatus.Present if status_val == 1 else DailyAttendanceStatus.Absent
                 
                 # Check for duplicate
