@@ -137,7 +137,7 @@ record_test(
 # 1.4 Wrong file type (.pdf) to results bulk upload
 f = make_upload_file("test.pdf", b"%PDF-1.4 dummy")
 try:
-    bulk_results(file=f, current_user=admin_user, db=db)
+    asyncio.run(bulk_results(file=f, current_user=admin_user, db=db))
     act = "Accepted without error"
     passed = False
 except HTTPException as e:
@@ -162,7 +162,7 @@ buf = io.BytesIO()
 df_miss_res.to_excel(buf, index=False)
 f = make_upload_file("missing_internal.xlsx", buf.getvalue())
 try:
-    bulk_results(file=f, current_user=admin_user, db=db)
+    asyncio.run(bulk_results(file=f, current_user=admin_user, db=db))
     act = "Accepted without error"
     passed = False
 except HTTPException as e:
@@ -449,10 +449,20 @@ record_test(
 )
 
 # 3.4 Duplicate student enrollment in admission service
+if not db.query(User).filter(User.email == "testpdf@student.smartuniversity.edu").first():
+    process_single_admission(db, {
+        "full_name": "Initial Student",
+        "email": "testpdf@student.smartuniversity.edu",
+        "department_name": "Computer Applications",
+        "course_name": "Master of Computer Applications",
+        "semester": 1,
+        "admission_year": 2026
+    })
+
 dup_adm_res = process_single_admission(db, {
     "full_name": "Duplicate Student",
     "email": "testpdf@student.smartuniversity.edu",
-    "department_name": "Computer Science",
+    "department_name": "Computer Applications",
     "course_name": "Master of Computer Applications",
     "semester": 1,
     "admission_year": 2026

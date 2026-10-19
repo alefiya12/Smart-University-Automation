@@ -25,17 +25,14 @@ class ReviewNote(BaseModel):
 
 # ── Bulk marks upload ─────────────────────────────────────────────────────────
 @router.post("/bulk", summary="Upload marks and calculate grades (admin/faculty)")
-def bulk_results(
+async def bulk_results(
     file: UploadFile = File(...),
     current_user: User = Depends(require_faculty),
     db: Session = Depends(get_db),
 ):
     import pandas as pd, io
-    import asyncio
-    
-    loop = asyncio.new_event_loop()
-    content = loop.run_until_complete(file.read())
-    loop.close()
+
+    content = await file.read()
 
     if not content or len(content) == 0:
         raise HTTPException(400, "Empty file uploaded.")
@@ -66,9 +63,10 @@ def bulk_results(
         raise HTTPException(400, f"Could not parse Excel: {exc}")
         
     result = result_service.process_bulk_results(db, records, triggered_by=current_user.username)
-    if result.get("failed") > 0 and len(result.get("errors", [])) > 0:
-        raise HTTPException(400, f"Upload Aborted. Reason: {result['errors'][0]}")
-        
+    # Only abort if ALL records failed (complete dataset rejection)
+    if result.get("failed", 0) > 0 and result.get("total", 0) == result.get("failed", 0):
+        raise HTTPException(400, f"Upload Aborted. All records failed. Reason: {result['errors'][0] if result.get('errors') else 'Unknown error'}")
+
     return {"success": True, **result}
 
 

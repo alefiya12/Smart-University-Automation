@@ -5,7 +5,8 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.append(str(BASE_DIR))
 
-from app.database import SessionLocal
+from app.database import SessionLocal, engine, Base
+import app.models  # registers all ORM models
 from app.models.user import User, UserRole
 from app.models.faculty import Faculty
 from app.models.student import Student
@@ -14,6 +15,7 @@ from app.models.course import Course
 from app.utils.security import hash_password
 
 def seed():
+    Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
         # 1. Admin
