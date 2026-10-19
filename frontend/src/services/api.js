@@ -86,6 +86,7 @@ export const managementApi = {
   deleteFee:        (id) => api.delete(`/fees/${id}`),
   
   // Students (Admissions)
+  uploadAdmission:  (data) => api.post('/admission/bulk/upload', data, { headers: { 'Content-Type': 'multipart/form-data' } }),
   updateStudent:    (id, data) => api.put(`/admission/${id}`, data),
   deleteStudent:    (id) => api.delete(`/admission/${id}`),
 

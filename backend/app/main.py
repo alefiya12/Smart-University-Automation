@@ -71,9 +71,11 @@ app.include_router(bots_router.router)
 
 
 @app.get("/", tags=["Health"])
+@app.get("/api/health", tags=["Health"])
 async def health_check():
     return {
         "status": "ok",
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
     }
+

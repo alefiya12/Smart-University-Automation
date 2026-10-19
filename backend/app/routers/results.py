@@ -133,8 +133,9 @@ def bulk_results_json(
     db: Session = Depends(get_db),
 ):
     result = result_service.process_bulk_results(db, body.records, triggered_by=current_user.username)
-    if result.get("failed") > 0 and len(result.get("errors", [])) > 0:
-        raise HTTPException(400, f"Upload Aborted. Reason: {result['errors'][0]}")
+    # Only abort if ALL records failed (complete dataset rejection) — consistent with Excel upload
+    if result.get("failed", 0) > 0 and result.get("total", 0) == result.get("failed", 0):
+        raise HTTPException(400, f"Upload Aborted. All records failed. Reason: {result['errors'][0] if result.get('errors') else 'Unknown error'}")
     return {"success": True, **result}
 
 

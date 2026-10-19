@@ -438,8 +438,9 @@ def export_allocation(
         
     df = pd.DataFrame(data)
     
-    export_path = "backend/sample_data/allocation_results.xlsx"
-    os.makedirs(os.path.dirname(export_path), exist_ok=True)
+    export_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'reports', 'exports')
+    os.makedirs(export_dir, exist_ok=True)
+    export_path = os.path.join(export_dir, 'allocation_results.xlsx')
     df.to_excel(export_path, index=False)
     
     return FileResponse(

@@ -20,6 +20,11 @@ export default function AdminAdmission() {
   const [stagingRecords, setStagingRecords] = useState([])
   const [fetching, setFetching] = useState(true)
 
+  // Direct Bulk Admission Upload State
+  const [admissionFile, setAdmissionFile] = useState(null)
+  const [admissionUploading, setAdmissionUploading] = useState(false)
+  const [admissionResult, setAdmissionResult] = useState(null)
+
   // Advanced Allocation Engine State
   const [allocationFile, setAllocationFile] = useState(null)
   const [allocationLoading, setAllocationLoading] = useState({ upload: false, run: false, commit: false })
@@ -39,6 +44,43 @@ export default function AdminAdmission() {
   useEffect(() => {
     fetchStagingRecords()
   }, [])
+
+  // --- Direct Bulk Admission Upload Handler ---
+  const handleAdmissionFileChange = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setAdmissionFile(e.target.files[0])
+      setAdmissionResult(null)
+    }
+  }
+
+  const handleDirectAdmissionUpload = async () => {
+    if (!admissionFile) {
+      toast.error('Please select an Excel file first.')
+      return
+    }
+    setAdmissionUploading(true)
+    setAdmissionResult(null)
+    const formData = new FormData()
+    formData.append('file', admissionFile)
+    try {
+      const res = await managementApi.uploadAdmission(formData)
+      const d = res.data
+      setAdmissionResult(d)
+      if (d.succeeded > 0) {
+        toast.success(`${d.succeeded} students admitted successfully! (${d.failed} skipped)`)
+      } else {
+        toast.error(`No new students admitted. ${d.failed} records skipped (duplicates or errors).`)
+      }
+      setAdmissionFile(null)
+      document.getElementById('admission-direct-upload').value = ''
+    } catch (err) {
+      const detail = err.response?.data?.detail || 'Upload failed.'
+      toast.error(detail)
+      setAdmissionResult({ error: detail })
+    } finally {
+      setAdmissionUploading(false)
+    }
+  }
 
   const getStatusBadge = (status) => {
     switch(status) {
@@ -186,6 +228,84 @@ export default function AdminAdmission() {
         color="#1A56DB"
         colorLight="#EBF1FF"
       />
+
+      {/* ── Direct Bulk Admission Upload ──────────────────────────────── */}
+      <Card
+        title="📥 Direct Bulk Admission Upload"
+        subtitle="Upload an Excel file to instantly admit students — Required columns: full_name, email | Optional: department_name, course_name, semester, phone, address"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+          <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: '250px' }}>
+              <label className="form-label" style={{ display: 'block', marginBottom: 'var(--space-2)' }}>
+                Select Excel File (.xlsx / .xls)
+              </label>
+              <input
+                id="admission-direct-upload"
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleAdmissionFileChange}
+                style={{
+                  width: '100%', padding: 'var(--space-2)',
+                  border: '1px dashed var(--color-border)',
+                  borderRadius: 'var(--radius-md)', fontSize: 'var(--text-sm)',
+                  cursor: 'pointer', background: 'var(--color-surface)'
+                }}
+              />
+            </div>
+            <Button
+              variant="primary"
+              onClick={handleDirectAdmissionUpload}
+              loading={admissionUploading}
+              disabled={!admissionFile}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              🚀 Upload &amp; Admit
+            </Button>
+          </div>
+
+          {admissionResult && !admissionResult.error && (
+            <div style={{
+              padding: 'var(--space-4)', borderRadius: 'var(--radius-md)',
+              background: admissionResult.succeeded > 0 ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)',
+              border: `1px solid ${admissionResult.succeeded > 0 ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+              display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-3)'
+            }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-text)' }}>{admissionResult.total}</div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>Total Records</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: '#10B981' }}>{admissionResult.succeeded}</div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>Admitted</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: admissionResult.failed > 0 ? '#EF4444' : '#10B981' }}>{admissionResult.failed}</div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>Skipped / Failed</div>
+              </div>
+              {admissionResult.errors && admissionResult.errors.length > 0 && (
+                <div style={{ gridColumn: '1/-1', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
+                  <strong>Skipped reasons:</strong>
+                  <ul style={{ margin: 'var(--space-1) 0 0 var(--space-4)', padding: 0 }}>
+                    {admissionResult.errors.slice(0, 5).map((e, i) => <li key={i}>{e}</li>)}
+                    {admissionResult.errors.length > 5 && <li>...and {admissionResult.errors.length - 5} more</li>}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {admissionResult?.error && (
+            <div style={{ padding: 'var(--space-3)', borderRadius: 'var(--radius-md)', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', color: '#EF4444', fontSize: 'var(--text-sm)' }}>
+              ⚠️ {admissionResult.error}
+            </div>
+          )}
+
+          <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', margin: 0 }}>
+            ℹ️ Duplicate emails are automatically skipped. Download sample: <strong>backend/sample_data/01_Admission_Bulk_Upload.xlsx</strong>
+          </p>
+        </div>
+      </Card>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 'var(--space-6)' }}>
         {/* Advanced Allocation Engine Card */}
